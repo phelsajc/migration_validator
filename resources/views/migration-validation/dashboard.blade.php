@@ -46,9 +46,9 @@
                                     <button type="button" class="btn btn-primary me-2" onclick="validatePatients()">
                                         <i class="fas fa-search"></i> Validate Patients
                                     </button>
-                                    <button type="button" class="btn btn-success" onclick="validateAllTables()">
+                                    <!-- <button type="button" class="btn btn-success" onclick="validateAllTables()">
                                         <i class="fas fa-check-double"></i> Validate All
-                                    </button>
+                                    </button> -->
                                 </div>
                             </div>
                         </form>
@@ -82,7 +82,7 @@
         </div>
 
         <!-- Validation History -->
-        <div class="row">
+        <!-- <div class="row">
             <div class="col-12">
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
@@ -101,7 +101,7 @@
                     </div>
                 </div>
             </div>
-        </div>
+        </div> -->
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -348,9 +348,9 @@
         }
 
         // Load history on page load
-        document.addEventListener('DOMContentLoaded', function() {
+        /* document.addEventListener('DOMContentLoaded', function() {
             loadHistory();
-        });
+        }); */
     </script>
 </body>
 </html>

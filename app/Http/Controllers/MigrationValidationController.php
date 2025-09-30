@@ -37,7 +37,9 @@ class MigrationValidationController extends Controller
                 'start_date_input' => $startDateInput,
                 'end_date_input' => $endDateInput,
                 'start_date_formatted' => $startDate,
-                'end_date_formatted' => $endDate
+                'end_date_formatted' => $endDate,
+                'start_date_sql' => Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s'),
+                'end_date_sql' => Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s')
             ]);
             
             // Get MongoDB count using the provided pipeline
@@ -45,6 +47,14 @@ class MigrationValidationController extends Controller
             
             // Get MSSQL count
             $mssqlCount = $this->getMSSQLCount($startDate, $endDate);
+            
+            // Log the counts for debugging
+            Log::info('Validation counts', [
+                'mongodb_count' => $mongodbCount,
+                'mssql_count' => $mssqlCount,
+                'difference' => $mongodbCount - $mssqlCount,
+                'date_range' => $startDateInput . ' to ' . $endDateInput
+            ]);
             
             // Calculate difference
             $difference = $mongodbCount - $mssqlCount;
@@ -96,7 +106,7 @@ class MigrationValidationController extends Controller
             ]);
             
             // Try to create index first for better performance
-            $this->createMongoDBIndex();
+            //$this->createMongoDBIndex();
             
             // Method 1: Try simple count first (fastest)
             try {
@@ -182,53 +192,6 @@ class MigrationValidationController extends Controller
     }
 
     /**
-     * Create index on modifiedat field for better performance
-     */
-    private function createMongoDBIndex()
-    {
-        try {
-            Log::info('Creating index on modifiedat field...');
-            
-            $result = DB::connection('mongodb')
-                ->collection('patients')
-                ->raw(function ($collection) {
-                    return $collection->createIndex(['modifiedat' => 1], [
-                        'background' => true,
-                        'name' => 'modifiedat_1'
-                    ]);
-                });
-            
-            Log::info('Index created successfully on modifiedat field');
-            return true;
-            
-        } catch (Exception $e) {
-            Log::warning('Could not create index on modifiedat field: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Public method to create MongoDB index
-     */
-    public function createIndex()
-    {
-        try {
-            $success = $this->createMongoDBIndex();
-            
-            return response()->json([
-                'success' => $success,
-                'message' => $success ? 'Index created successfully' : 'Failed to create index'
-            ]);
-            
-        } catch (Exception $e) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Failed to create index: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
      * Get count from MSSQL
      */
     private function getMSSQLCount($startDate, $endDate)
@@ -247,6 +210,60 @@ class MigrationValidationController extends Controller
         } catch (Exception $e) {
             Log::error('MSSQL count error: ' . $e->getMessage());
             throw new Exception('Failed to get MSSQL count: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Debug method to investigate date differences
+     */
+    public function debugDateRange(Request $request)
+    {
+        try {
+            $startDateInput = $request->input('start_date', now()->format('Y-m-d'));
+            $endDateInput = $request->input('end_date', now()->format('Y-m-d'));
+            
+            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
+            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
+            
+            $startDateTime = Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s');
+            $endDateTime = Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s');
+            
+            // Get sample records from MongoDB
+            $mongoSamples = DB::connection('mongodb')
+                ->collection('patients')
+                ->where('modifiedat', '>=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000))
+                ->where('modifiedat', '<=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000))
+                ->limit(5)
+                ->get()
+                ->toArray();
+            
+            // Get sample records from MSSQL
+            $mssqlSamples = DB::connection('sqlsrv')
+                ->select("SELECT TOP 5 modifieddate FROM patients WHERE CONVERT(datetime,modifieddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' BETWEEN '$startDateTime' AND '$endDateTime'");
+            
+            return response()->json([
+                'success' => true,
+                'debug_info' => [
+                    'date_range' => [
+                        'start_input' => $startDateInput,
+                        'end_input' => $endDateInput,
+                        'mongo_start' => $startDate,
+                        'mongo_end' => $endDate,
+                        'sql_start' => $startDateTime,
+                        'sql_end' => $endDateTime
+                    ],
+                    'mongo_samples' => $mongoSamples,
+                    'mssql_samples' => $mssqlSamples,
+                    'mongo_count' => $this->getMongoDBCount($startDate, $endDate),
+                    'mssql_count' => $this->getMSSQLCount($startDate, $endDate)
+                ]
+            ]);
+            
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Debug failed: ' . $e->getMessage()
+            ], 500);
         }
     }
 

@@ -26,4 +26,5 @@ Route::prefix('migration-validation')->group(function () {
     Route::get('/history', [MigrationValidationController::class, 'getValidationHistory']);
     Route::post('/validate/all', [MigrationValidationController::class, 'validateAllTables']);
     Route::post('/create-index', [MigrationValidationController::class, 'createIndex']);
+    Route::get('/debug', [MigrationValidationController::class, 'debugDateRange']);
 });
