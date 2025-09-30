@@ -24,8 +24,21 @@ class MigrationValidationController extends Controller
     public function validatePatients(Request $request)
     {
         try {
-            $startDate = $request->input('start_date');
-            $endDate = $request->input('end_date');
+            // Handle both GET and POST requests with proper date formatting
+            $startDateInput = $request->input('start_date', $request->query('start_date', now()->format('Y-m-d')));
+            $endDateInput = $request->input('end_date', $request->query('end_date', now()->format('Y-m-d')));
+            
+            // Format dates properly for MongoDB
+            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
+            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
+            
+            // Log the formatted dates for debugging
+            Log::info('Date formatting', [
+                'start_date_input' => $startDateInput,
+                'end_date_input' => $endDateInput,
+                'start_date_formatted' => $startDate,
+                'end_date_formatted' => $endDate
+            ]);
             
             // Get MongoDB count using the provided pipeline
             $mongodbCount = $this->getMongoDBCount($startDate, $endDate);
@@ -34,10 +47,10 @@ class MigrationValidationController extends Controller
             $mssqlCount = $this->getMSSQLCount($startDate, $endDate);
             
             // Calculate difference
-            //$difference = $mongodbCount - $mssqlCount;
-            //$isComplete = $difference === 0;
+            $difference = $mongodbCount - $mssqlCount;
+            $isComplete = $difference === 0;
             
-            /* $result = [
+            $result = [
                 'table' => 'patients',
                 'mongodb_count' => $mongodbCount,
                 'mssql_count' => $mssqlCount,
@@ -47,11 +60,11 @@ class MigrationValidationController extends Controller
                 'end_date' => $endDate,
                 'validated_at' => now()->toISOString(),
                 'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE'
-            ]; */
+            ];
             
             return response()->json([
                 'success' => true,
-                'data' => $mongodbCount
+                'data' => $result
             ]);
             
         } catch (Exception $e) {
@@ -227,7 +240,7 @@ class MigrationValidationController extends Controller
             
             // Execute the SQL query
             $result = DB::connection('sqlsrv')
-                ->select("SELECT COUNT(*) as total FROM patients");
+                ->select("SELECT COUNT(*) as total FROM patients where CONVERT(datetime,modifieddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' between   '$startDateTime' and '$endDateTime'");
             
             return $result[0]->total ?? 0;
             
@@ -289,8 +302,13 @@ class MigrationValidationController extends Controller
     public function validateAllTables(Request $request)
     {
         try {
-            $startDate = $request->input('start_date', '2025-03-28T00:00:00Z');
-            $endDate = $request->input('end_date', '2025-09-28T23:59:59Z');
+            // Handle both GET and POST requests with proper date formatting
+            $startDateInput = $request->input('start_date', $request->query('start_date', now()->format('Y-m-d')));
+            $endDateInput = $request->input('end_date', $request->query('end_date', now()->format('Y-m-d')));
+            
+            // Format dates properly for MongoDB
+            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
+            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
             
             $tables = ['patients']; // Add more tables as needed
             

@@ -36,13 +36,11 @@
                             <div class="row">
                                 <div class="col-md-4">
                                     <label for="startDate" class="form-label">Start Date</label>
-                                    <input type="datetime-local" class="form-control" id="startDate" 
-                                           value="2025-09-28T00:00">
+                                    <input type="date" class="form-control" id="startDate">
                                 </div>
                                 <div class="col-md-4">
                                     <label for="endDate" class="form-label">End Date</label>
-                                    <input type="datetime-local" class="form-control" id="endDate" 
-                                           value="2025-09-28T23:59">
+                                    <input type="date" class="form-control" id="endDate">
                                 </div>
                                 <div class="col-md-4 d-flex align-items-end">
                                     <button type="button" class="btn btn-primary me-2" onclick="validatePatients()">
@@ -122,8 +120,9 @@
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
             
-            const startISODate = new Date(startDate).toISOString();
-            const endISODate = new Date(endDate).toISOString();
+            // Properly format dates for MongoDB (avoid timezone issues)
+            const startISODate = startDate ? startDate + 'T00:00:00.000Z' : new Date().toISOString().split('T')[0] + 'T00:00:00.000Z';
+            const endISODate = endDate ? endDate + 'T23:59:59.999Z' : new Date().toISOString().split('T')[0] + 'T23:59:59.999Z';
             
             fetch('/migration-validation/validate/patients', {
                 method: 'POST',
@@ -154,8 +153,9 @@
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
             
-            const startISODate = new Date(startDate).toISOString();
-            const endISODate = new Date(endDate).toISOString();
+            // Properly format dates for MongoDB (avoid timezone issues)
+            const startISODate = startDate ? startDate + 'T00:00:00.000Z' : new Date().toISOString().split('T')[0] + 'T00:00:00.000Z';
+            const endISODate = endDate ? endDate + 'T23:59:59.999Z' : new Date().toISOString().split('T')[0] + 'T23:59:59.999Z';
             
             fetch('/migration-validation/validate/all', {
                 method: 'POST',
@@ -195,69 +195,88 @@
         function displayValidationResult(data) {
             const resultsDiv = document.getElementById('validationResults');
             
-            if (data.success) {
+            if (data && data.success && data.data) {
                 const result = data.data;
+                
+                // Safe property access with fallbacks
+                const table = result.table || 'Unknown';
+                const mongodbCount = result.mongodb_count || 0;
+                const mssqlCount = result.mssql_count || 0;
+                const difference = result.difference || 0;
+                const isComplete = result.is_complete || false;
+                const status = result.status || 'UNKNOWN';
+                const validatedAt = result.validated_at || new Date().toISOString();
+                
                 resultsDiv.innerHTML = `
                     <div class="validation-result p-3 mb-3">
                         <div class="row">
                             <div class="col-md-3">
-                                <strong>Table:</strong> ${result.table}
+                                <strong>Table:</strong> ${table}
                             </div>
                             <div class="col-md-3">
-                                <strong>MongoDB Count:</strong> ${result.mongodb_count.toLocaleString()}
+                                <strong>MongoDB Count:</strong> ${Number(mongodbCount).toLocaleString()}
                             </div>
                             <div class="col-md-3">
-                                <strong>MSSQL Count:</strong> ${result.mssql_count.toLocaleString()}
+                                <strong>MSSQL Count:</strong> ${Number(mssqlCount).toLocaleString()}
                             </div>
                             <div class="col-md-3">
                                 <strong>Difference:</strong> 
-                                <span class="${result.difference === 0 ? 'status-complete' : 'status-incomplete'}">
-                                    ${result.difference.toLocaleString()}
+                                <span class="${difference === 0 ? 'status-complete' : 'status-incomplete'}">
+                                    ${Number(difference).toLocaleString()}
                                 </span>
                             </div>
                         </div>
                         <div class="row mt-2">
                             <div class="col-md-6">
                                 <strong>Status:</strong> 
-                                <span class="badge ${result.is_complete ? 'bg-success' : 'bg-danger'}">
-                                    ${result.status}
+                                <span class="badge ${isComplete ? 'bg-success' : 'bg-danger'}">
+                                    ${status}
                                 </span>
                             </div>
                             <div class="col-md-6">
-                                <strong>Validated At:</strong> ${new Date(result.validated_at).toLocaleString()}
+                                <strong>Validated At:</strong> ${new Date(validatedAt).toLocaleString()}
                             </div>
                         </div>
                     </div>
                 `;
             } else {
-                displayError(data.error || 'Validation failed');
+                console.error('Invalid response data:', data);
+                displayError(data?.error || 'Validation failed - Invalid response format');
             }
         }
 
         function displayValidationResults(data) {
             const resultsDiv = document.getElementById('validationResults');
             
-            if (data.success) {
+            if (data && data.success && data.data && data.data.validations) {
                 let html = '<div class="row">';
                 
                 data.data.validations.forEach(result => {
+                    // Safe property access with fallbacks
+                    const table = result.table || 'Unknown';
+                    const mongodbCount = result.mongodb_count || 0;
+                    const mssqlCount = result.mssql_count || 0;
+                    const difference = result.difference || 0;
+                    const isComplete = result.is_complete || false;
+                    const status = result.status || 'UNKNOWN';
+                    
                     html += `
                         <div class="col-md-6 mb-3">
                             <div class="validation-result p-3">
-                                <h6>${result.table}</h6>
+                                <h6>${table}</h6>
                                 <div class="row">
                                     <div class="col-6">
-                                        <small>MongoDB: ${result.mongodb_count.toLocaleString()}</small><br>
-                                        <small>MSSQL: ${result.mssql_count.toLocaleString()}</small>
+                                        <small>MongoDB: ${Number(mongodbCount).toLocaleString()}</small><br>
+                                        <small>MSSQL: ${Number(mssqlCount).toLocaleString()}</small>
                                     </div>
                                     <div class="col-6 text-end">
                                         <small>Difference: 
-                                            <span class="${result.difference === 0 ? 'status-complete' : 'status-incomplete'}">
-                                                ${result.difference.toLocaleString()}
+                                            <span class="${difference === 0 ? 'status-complete' : 'status-incomplete'}">
+                                                ${Number(difference).toLocaleString()}
                                             </span>
                                         </small><br>
-                                        <span class="badge ${result.is_complete ? 'bg-success' : 'bg-danger'}">
-                                            ${result.status}
+                                        <span class="badge ${isComplete ? 'bg-success' : 'bg-danger'}">
+                                            ${status}
                                         </span>
                                     </div>
                                 </div>
@@ -281,7 +300,8 @@
                 
                 resultsDiv.innerHTML = html;
             } else {
-                displayError(data.error || 'Validation failed');
+                console.error('Invalid response data:', data);
+                displayError(data?.error || 'Validation failed - Invalid response format');
             }
         }
 
