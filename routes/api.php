@@ -25,4 +25,5 @@ Route::prefix('migration-validation')->group(function () {
     Route::post('/validate/patients', [MigrationValidationController::class, 'validatePatients']);
     Route::get('/history', [MigrationValidationController::class, 'getValidationHistory']);
     Route::post('/validate/all', [MigrationValidationController::class, 'validateAllTables']);
+    Route::post('/create-index', [MigrationValidationController::class, 'createIndex']);
 });
