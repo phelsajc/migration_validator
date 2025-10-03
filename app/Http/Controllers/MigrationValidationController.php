@@ -31,13 +31,21 @@ class MigrationValidationController extends Controller
             'pipeline_type' => 'complex'
         ],
         'patientorderitems' => [
-            'mongodb_collection' => 'patientorderitems',
+            'mongodb_collection' => 'patientorders',
             'mssql_table' => 'patientorderitems',
             'date_field_mongo' => 'modifiedat',
             'date_field_mssql' => 'modifieddate',
-            'identifier_field' => 'order_item_id',
+            'identifier_field' => '_id',
             'pipeline_type' => 'complex'
-        ]
+        ],
+        'bedoccupancy' => [
+            'mongodb_collection' => 'patientvisits',
+            'mssql_table' => 'bedoccupancy',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -80,6 +88,7 @@ class MigrationValidationController extends Controller
                 return [
                     [
                         '$match' => [
+                            'iscareprovider' => true,
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
@@ -139,6 +148,17 @@ class MigrationValidationController extends Controller
 
             case 'patientorderitems':
                 return [
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ],
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ],
                     ['$unwind' => ['path' => '$patientorderitems', 'preserveNullAndEmptyArrays' => true]],
                     [
                         '$lookup' => [
@@ -290,20 +310,144 @@ class MigrationValidationController extends Controller
                             'as' => 'frequencyDetails'
                         ]
                     ],
-                    [
-                        '$match' => [
-                            $config['date_field_mongo'] => [
-                                '$gte' => $startISODate,
-                                '$lte' => $endISODate
-                            ],
-                            'order_details.status' => 'active'
-                        ]
-                    ],
-                    [
-                        '$count' => 'Total'
-                    ]
                 ];
-
+            case 'bedoccupancy':
+                    return [
+                        [
+                            '$match' => [
+                                $config['date_field_mongo'] => [
+                                    '$gte' => $startISODate,
+                                    '$lte' => $endISODate
+                                ]
+                            ]
+                        ],
+                        [
+                            '$match' => [
+                                'bedoccupancy' => [
+                                    '$exists' => true,
+                                    '$ne' => []
+                                ]
+                            ]
+                        ],[
+                            '$unwind' => [
+                                'path' => '$bedoccupancy',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'beds',
+                                'localField' => 'bedoccupancy.beduid',
+                                'foreignField' => '_id',
+                                'as' => 'bedsDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$bedsDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$addFields' => [
+                                'resolvedWardUid' => [
+                                    '$ifNull' => [
+                                        '$bedoccupancy.warduid',
+                                        '$bedsDetails.warduid'
+                                    ]
+                                ]
+                            ]
+                        ],
+            
+                        [
+                            '$lookup' => [
+                                'from' => 'organisations',
+                                'localField' => 'orguid',
+                                'foreignField' => '_id',
+                                'as' => 'orgDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$orgDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'wards',
+                                'localField' => 'resolvedWardUid',
+                                'foreignField' => '_id',
+                                'as' => 'stnDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$stnDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'locations',
+                                'localField' => 'bedsDetails.roomuid',
+                                'foreignField' => '_id',
+                                'as' => 'locDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$locDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'referencevalues',
+                                'localField' => 'bedoccupancy.bedcategoryuid',
+                                'foreignField' => '_id',
+                                'as' => 'refDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$refDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+            
+                        [
+                            '$lookup' => [
+                                'from' => 'beds',
+                                'localField' => 'bedoccupancy.beduid',
+                                'foreignField' => '_id',
+                                'as' => 'bedParentDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$bedParentDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'departments',
+                                'localField' => 'bedParentDetails.owningdeptuid',
+                                'foreignField' => '_id',
+                                'as' => 'depOwningDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$depOwningDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$count' => 'Total'
+                        ],
+                    ];
             default:
                 // Generic pipeline for simple tables
                 return [
@@ -583,6 +727,93 @@ class MigrationValidationController extends Controller
         } catch (Exception $e) {
             Log::error('MSSQL count error: ' . $e->getMessage());
             throw new Exception('Failed to get MSSQL count: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Debug MongoDB query for specific table
+     */
+    public function debugMongoQuery(Request $request)
+    {
+        try {
+            $tableName = $request->input('table', 'careproviders');
+            $startDateInput = $request->input('start_date', now()->format('Y-m-d'));
+            $endDateInput = $request->input('end_date', now()->format('Y-m-d'));
+            
+            if (!isset($this->migrationTables[$tableName])) {
+                return response()->json([
+                    'success' => false,
+                    'error' => "Table '{$tableName}' not configured"
+                ], 400);
+            }
+            
+            $config = $this->migrationTables[$tableName];
+            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
+            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
+            
+            $startISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000);
+            $endISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000);
+            
+            // Get sample records to see what's being matched
+            $sampleRecords = DB::connection('mongodb')
+                ->collection($config['mongodb_collection'])
+                ->where($config['date_field_mongo'], '>=', $startISODate)
+                ->where($config['date_field_mongo'], '<=', $endISODate)
+                ->limit(5)
+                ->get()
+                ->toArray();
+            
+            // Get total count
+            $totalCount = DB::connection('mongodb')
+                ->collection($config['mongodb_collection'])
+                ->where($config['date_field_mongo'], '>=', $startISODate)
+                ->where($config['date_field_mongo'], '<=', $endISODate)
+                ->count();
+            
+            // Get all records with their dates for debugging
+            $allRecords = DB::connection('mongodb')
+                ->collection($config['mongodb_collection'])
+                ->limit(20)
+                ->get()
+                ->toArray();
+            
+            $formattedRecords = [];
+            foreach ($allRecords as $record) {
+                if (isset($record[$config['date_field_mongo']])) {
+                    $formattedRecords[] = [
+                        'id' => $record['_id'] ?? 'N/A',
+                        'date_field' => $config['date_field_mongo'],
+                        'date_value' => $record[$config['date_field_mongo']]->toDateTime()->format('Y-m-d H:i:s'),
+                        'date_iso' => $record[$config['date_field_mongo']]->toDateTime()->toISOString(),
+                        'identifier' => $record[$config['identifier_field']] ?? 'N/A'
+                    ];
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'debug_info' => [
+                    'table' => $tableName,
+                    'config' => $config,
+                    'date_range' => [
+                        'start_input' => $startDateInput,
+                        'end_input' => $endDateInput,
+                        'start_iso' => $startDate,
+                        'end_iso' => $endDate,
+                        'start_mongo' => $startISODate->toDateTime()->format('Y-m-d H:i:s'),
+                        'end_mongo' => $endISODate->toDateTime()->format('Y-m-d H:i:s')
+                    ],
+                    'total_count' => $totalCount,
+                    'sample_matched_records' => $sampleRecords,
+                    'all_records_sample' => $formattedRecords
+                ]
+            ]);
+            
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Debug failed: ' . $e->getMessage()
+            ], 500);
         }
     }
 
