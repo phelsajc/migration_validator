@@ -54,6 +54,14 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'payors' => [
+            'mongodb_collection' => 'payors',
+            'mssql_table' => 'payors',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -520,6 +528,76 @@ class MigrationValidationController extends Controller
                         '$unwind' => [
                             'path' => '$visitDetails',
                             'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'payors':
+                return [
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'as' => 'typeDetails',
+                            'from' => 'referencevalues',
+                            'foreignField' => '_id',
+                            'localField' => 'payortypeuid',
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$typeDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'as' => 'tpasDetails',
+                            'from' => 'tpas',
+                            'foreignField' => '_id',
+                            'localField' => 'associatedpayoragreementsandtpa.tpauid',
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$tpasDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'as' => 'tpasCreditDetails',
+                            'from' => 'referencevalues',
+                            'foreignField' => '_id',
+                            'localField' => 'tpasDetails.credittermuid',
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$tpasCreditDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails',
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true,
                         ]
                     ],
                     [
