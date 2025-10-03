@@ -21,8 +21,20 @@ Route::middleware('auth:api')->get('/user', function (Request $request) {
 
 // Migration Validation API Routes (no CSRF protection)
 Route::prefix('migration-validation')->group(function () {
+    // Legacy routes
     Route::get('/validate/patients', [MigrationValidationController::class, 'validatePatients']);
     Route::post('/validate/patients', [MigrationValidationController::class, 'validatePatients']);
+    
+    // Generic validation routes
+    Route::get('/validate/table', [MigrationValidationController::class, 'validateTable']);
+    Route::post('/validate/table', [MigrationValidationController::class, 'validateTable']);
+    
+    // Specific table routes
+    Route::get('/validate/careproviders', [MigrationValidationController::class, 'validateTable'])->defaults('table', 'careproviders');
+    Route::get('/validate/patientorderitems', [MigrationValidationController::class, 'validateTable'])->defaults('table', 'patientorderitems');
+    
+    // Other routes
+    Route::get('/tables', [MigrationValidationController::class, 'getAvailableTables']);
     Route::get('/history', [MigrationValidationController::class, 'getValidationHistory']);
     Route::post('/validate/all', [MigrationValidationController::class, 'validateAllTables']);
     Route::post('/create-index', [MigrationValidationController::class, 'createIndex']);

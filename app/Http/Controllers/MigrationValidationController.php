@@ -11,6 +11,35 @@ use Carbon\Carbon;
 class MigrationValidationController extends Controller
 {
     /**
+     * Table configurations for migration validation
+     */
+    private $migrationTables = [
+        'patients' => [
+            'mongodb_collection' => 'patients',
+            'mssql_table' => 'patients',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => 'mrn',
+            'pipeline_type' => 'simple'
+        ],
+        'careproviders' => [
+            'mongodb_collection' => 'users',
+            'mssql_table' => 'careprovider',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => 'code',
+            'pipeline_type' => 'complex'
+        ],
+        'patientorderitems' => [
+            'mongodb_collection' => 'patientorderitems',
+            'mssql_table' => 'patientorderitems',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => 'order_item_id',
+            'pipeline_type' => 'complex'
+        ]
+    ];
+    /**
      * Display the migration validation dashboard
      */
     public function index()
@@ -19,7 +48,363 @@ class MigrationValidationController extends Controller
     }
 
     /**
-     * Validate patients table migration completeness
+     * Get pipeline for specific table based on configuration
+     */
+    private function getPipelineForTable($tableName, $startDate, $endDate)
+    {
+        if (!isset($this->migrationTables[$tableName])) {
+            throw new Exception("Table configuration not found: {$tableName}");
+        }
+
+        $config = $this->migrationTables[$tableName];
+        $startISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000);
+        $endISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000);
+
+        switch($tableName) {
+            case 'patients':
+                return [
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+
+            case 'careproviders':
+                return [
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ],[
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'genderuid',
+                            'foreignField' => '_id',
+                            'as' => 'genderDetails'
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$genderDetails', 'preserveNullAndEmptyArrays' => true]],
+        
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'specialtyuid',
+                            'foreignField' => '_id',
+                            'as' => 'specialtyDetails'
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$specialtyDetails', 'preserveNullAndEmptyArrays' => true]],
+        
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'useridentifiers.idtypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'phicnoDetails'
+                        ]
+                    ],
+        
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$orgDetails', 'preserveNullAndEmptyArrays' => true]],
+        
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'subspecialtyuids',
+                            'foreignField' => '_id',
+                            'as' => 'subSpecialtyDetails'
+                        ]
+                    ]
+                ];
+
+            case 'patientorderitems':
+                return [
+                    ['$unwind' => ['path' => '$patientorderitems', 'preserveNullAndEmptyArrays' => true]],
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'patientorderitems.billinggroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'billinggroupDetails'
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$billinggroupDetails', 'preserveNullAndEmptyArrays' => true]],
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'patientorderitems.billingsubgroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'billingsubgroupDetails'
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$billingsubgroupDetails', 'preserveNullAndEmptyArrays' => true]],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'billingsubgroupDetails.chargegroupcodeuid',
+                            'foreignField' => '_id',
+                            'as' => 'itemgroupDetails'
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$itemgroupDetails', 'preserveNullAndEmptyArrays' => true]],
+                    [
+                        '$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'patientorderitems.ordertodepartmentuid',
+                            'foreignField' => '_id',
+                            'as' => 'departmentDetails'
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$departmentDetails', 'preserveNullAndEmptyArrays' => true]],
+                    [
+                        '$lookup' => [
+                            'from' => 'tariffs',
+                            'localField' => 'patientorderitems.tariffuid',
+                            'foreignField' => '_id',
+                            'as' => 'tariffDetails'
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$tariffDetails', 'preserveNullAndEmptyArrays' => true]],
+                    [
+                        '$lookup' => [
+                            'from' => 'discountcodes',
+                            'localField' => 'patientorderitems.specialdiscountcodeuids',
+                            'foreignField' => '_id',
+                            'as' => 'discountcodesDetails'
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$discountcodesDetails', 'preserveNullAndEmptyArrays' => true]],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'patientorderitems.agreementdiscounttypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'payorDetails'
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$payorDetails', 'preserveNullAndEmptyArrays' => true]],
+        
+                    [
+                        '$lookup' => [
+                            'from' => 'wards',
+                            'localField' => 'warduid',
+                            'foreignField' => '_id',
+                            'as' => 'wards'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$wards',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'patientorderitems.statusuid',
+                            'foreignField' => '_id',
+                            'as' => 'statusDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$statusDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'tariffs',
+                            'localField' => 'patientorderitems.tariffuid',
+                            'foreignField' => '_id',
+                            'as' => 'tariffDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$tariffDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],  
+                    [
+                        '$lookup' => [
+                            'from' => 'users',
+                            'localField' => 'patientorderitems.careprovideruid',
+                            'foreignField' => '_id',
+                            'as' => 'careproviderDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$careproviderDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'orderitems',
+                            'localField' => 'patientorderitems.orderitemuid',
+                            'foreignField' => '_id',
+                            'as' => 'orderItemDetails'
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'frequencies',
+                            'localField' => 'patientorderitems.frequencyuid',
+                            'foreignField' => '_id',
+                            'as' => 'frequencyDetails'
+                        ]
+                    ],
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ],
+                            'order_details.status' => 'active'
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+
+            default:
+                // Generic pipeline for simple tables
+                return [
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+        }
+    }
+
+    /**
+     * Generic validation method for any table
+     */
+    public function validateTable(Request $request)
+    {
+        try {
+            $tableName = $request->input('table', 'patients');
+            
+            if (!isset($this->migrationTables[$tableName])) {
+                return response()->json([
+                    'success' => false,
+                    'error' => "Table '{$tableName}' is not configured for validation"
+                ], 400);
+            }
+            
+            // Handle both GET and POST requests with proper date formatting
+            $startDateInput = $request->input('start_date', $request->query('start_date', now()->format('Y-m-d')));
+            $endDateInput = $request->input('end_date', $request->query('end_date', now()->format('Y-m-d')));
+            
+            // Format dates properly for MongoDB
+            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
+            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
+            
+            // Log the formatted dates for debugging
+            Log::info('Date formatting', [
+                'table' => $tableName,
+                'start_date_input' => $startDateInput,
+                'end_date_input' => $endDateInput,
+                'start_date_formatted' => $startDate,
+                'end_date_formatted' => $endDate
+            ]);
+            
+            // Get MongoDB count using the provided pipeline
+            $mongodbCount = $this->getMongoDBCount($startDate, $endDate, $tableName);
+            
+            // Get MSSQL count
+            $mssqlCount = $this->getMSSQLCount($startDate, $endDate, $tableName);
+            
+            // Log the counts for debugging
+            Log::info('Validation counts', [
+                'table' => $tableName,
+                'mongodb_count' => $mongodbCount,
+                'mssql_count' => $mssqlCount,
+                'difference' => $mongodbCount - $mssqlCount,
+                'date_range' => $startDateInput . ' to ' . $endDateInput
+            ]);
+            
+            // Calculate difference
+            $difference = $mongodbCount - $mssqlCount;
+            $isComplete = $difference === 0;
+            
+            $result = [
+                'table' => $tableName,
+                'mongodb_count' => $mongodbCount,
+                'mssql_count' => $mssqlCount,
+                'difference' => $difference,
+                'is_complete' => $isComplete,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'validated_at' => now()->toISOString(),
+                'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE'
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'data' => $result
+            ]);
+            
+        } catch (Exception $e) {
+            Log::error('Migration validation error', [
+                'table' => $request->input('table', 'patients'),
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'error' => 'Validation failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Validate patients table migration completeness (legacy method)
      */
     public function validatePatients(Request $request)
     {
@@ -43,10 +428,10 @@ class MigrationValidationController extends Controller
             ]);
             
             // Get MongoDB count using the provided pipeline
-            $mongodbCount = $this->getMongoDBCount($startDate, $endDate);
+            $mongodbCount = $this->getMongoDBCount_Patients($startDate, $endDate);
             
             // Get MSSQL count
-            $mssqlCount = $this->getMSSQLCount($startDate, $endDate);
+            $mssqlCount = $this->getMSSQLCount_Patients($startDate, $endDate);
             
             // Log the counts for debugging
             Log::info('Validation counts', [
@@ -88,113 +473,101 @@ class MigrationValidationController extends Controller
     }
 
     /**
-     * Get count from MongoDB using optimized approach
+     * Get count from MongoDB using table-specific pipeline
      */
-    private function getMongoDBCount($startDate, $endDate)
+    private function getMongoDBCount($startDate, $endDate, $tableName = 'patients')
     {
         try {
             // Increase execution time limit
             set_time_limit(300);
             
-            // Convert ISO date strings to MongoDB ISODate format
-            $startISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000);
-            $endISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000);
-            
             Log::info('Starting MongoDB count query', [
+                'table' => $tableName,
                 'start_date' => $startDate,
                 'end_date' => $endDate
             ]);
             
-            // Try to create index first for better performance
-            //$this->createMongoDBIndex();
+            $config = $this->migrationTables[$tableName];
+            $pipeline = $this->getPipelineForTable($tableName, $startDate, $endDate);
             
-            // Method 1: Try simple count first (fastest)
-            try {
-                $count = DB::connection('mongodb')
-                    ->collection('patients')
-                    ->where('modifiedat', '>=', $startISODate)
-                    ->where('modifiedat', '<=', $endISODate)
-                    ->count();
-                
-                Log::info('MongoDB simple count completed', ['count' => $count]);
-                return $count;
-                
-            } catch (Exception $countException) {
-                Log::warning('Simple count failed, trying aggregation', ['error' => $countException->getMessage()]);
-                
-                // Method 2: Use aggregation with optimizations
-                $pipeline = [
-                    [
-                        '$match' => [
-                            'modifiedat' => [
-                                '$gte' => $startISODate,
-                                '$lte' => $endISODate
-                            ]
-                        ]
-                    ],
-                    [
-                        '$count' => 'Total'
-                    ]
-                ];
-                
-                $result = DB::connection('mongodb')
-                    ->collection('patients')
-                    ->raw(function ($collection) use ($pipeline) {
-                        return $collection->aggregate($pipeline, [
-                            'allowDiskUse' => true,
-                            'maxTimeMS' => 300000, // 5 minutes
-                            'batchSize' => 1000
-                        ]);
-                    })->toArray();
-                
-                $count = isset($result[0]['Total']) ? $result[0]['Total'] : 0;
-                Log::info('MongoDB aggregation count completed', ['count' => $count]);
-                return $count;
+            // Method 1: Try simple count first for simple pipelines
+            if ($config['pipeline_type'] === 'simple') {
+                try {
+                    $startISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000);
+                    $endISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000);
+                    
+                    $count = DB::connection('mongodb')
+                        ->collection($config['mongodb_collection'])
+                        ->where($config['date_field_mongo'], '>=', $startISODate)
+                        ->where($config['date_field_mongo'], '<=', $endISODate)
+                        ->count();
+                    
+                    Log::info('MongoDB simple count completed', ['table' => $tableName, 'count' => $count]);
+                    return $count;
+                    
+                } catch (Exception $countException) {
+                    Log::warning('Simple count failed, trying aggregation', [
+                        'table' => $tableName,
+                        'error' => $countException->getMessage()
+                    ]);
+                }
             }
+            
+            // Method 2: Use aggregation pipeline
+            $result = DB::connection('mongodb')
+                ->collection($config['mongodb_collection'])
+                ->raw(function ($collection) use ($pipeline) {
+                    return $collection->aggregate($pipeline, [
+                        'allowDiskUse' => true,
+                        'maxTimeMS' => 300000, // 5 minutes
+                        'batchSize' => 1000
+                    ]);
+                })->toArray();
+            
+            $count = isset($result[0]['Total']) ? $result[0]['Total'] : 0;
+            Log::info('MongoDB aggregation count completed', ['table' => $tableName, 'count' => $count]);
+            return $count;
             
         } catch (Exception $e) {
-            Log::error('MongoDB count error: ' . $e->getMessage());
-            
-            // Method 3: Fallback with estimated count for very large collections
-            try {
-                Log::info('Trying estimated count fallback...');
-                
-                // Get total collection count
-                $totalCount = DB::connection('mongodb')
-                    ->collection('patients')
-                    ->count();
-                
-                // Estimate based on date range (very rough approximation)
-                $startTimestamp = Carbon::parse($startDate)->timestamp;
-                $endTimestamp = Carbon::parse($endDate)->timestamp;
-                $now = now()->timestamp;
-                
-                // If date range is recent, assume higher percentage
-                $dateRangeDays = ($endTimestamp - $startTimestamp) / 86400; // days
-                $totalDays = $now / 86400; // total days since epoch
-                $estimatedPercentage = min(0.1, $dateRangeDays / $totalDays); // max 10%
-                
-                $estimatedCount = (int)($totalCount * $estimatedPercentage);
-                
-                Log::warning('Using estimated count', [
-                    'total_count' => $totalCount,
-                    'estimated_count' => $estimatedCount,
-                    'percentage' => $estimatedPercentage
-                ]);
-                
-                return $estimatedCount;
-                
-            } catch (Exception $fallbackException) {
-                Log::error('All MongoDB count methods failed: ' . $fallbackException->getMessage());
-                throw new Exception('Failed to get MongoDB count: ' . $e->getMessage());
-            }
+            Log::error('MongoDB count error', [
+                'table' => $tableName,
+                'error' => $e->getMessage()
+            ]);
+            throw new Exception("Failed to get MongoDB count for {$tableName}: " . $e->getMessage());
         }
     }
 
     /**
-     * Get count from MSSQL
+     * Get count from MSSQL using table-specific configuration
      */
-    private function getMSSQLCount($startDate, $endDate)
+    private function getMSSQLCount($startDate, $endDate, $tableName = 'patients')
+    {
+        try {
+            $config = $this->migrationTables[$tableName];
+            
+            // Convert to UTC timezone to match migration filter
+            $startDateTime = Carbon::parse($startDate)->utc()->format('Y-m-d H:i:s');
+            $endDateTime = Carbon::parse($endDate)->utc()->format('Y-m-d H:i:s');
+            
+            // Execute the SQL query - match the migration filter exactly
+            $result = DB::connection('sqlsrv')
+                ->select("SELECT COUNT(*) as total FROM {$config['mssql_table']} WHERE {$config['date_field_mssql']} >= '$startDateTime' AND {$config['date_field_mssql']} <= '$endDateTime'");
+            
+            return $result[0]->total ?? 0;
+            
+        } catch (Exception $e) {
+            Log::error('MSSQL count error', [
+                'table' => $tableName,
+                'error' => $e->getMessage()
+            ]);
+            throw new Exception("Failed to get MSSQL count for {$tableName}: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Get count from MSSQL (legacy method for patients)
+     */
+    private function getMSSQLCount_Patients($startDate, $endDate)
     {
         try {
             // Convert to UTC timezone to match migration filter
@@ -254,8 +627,8 @@ class MigrationValidationController extends Controller
                     ],
                     'mongo_samples' => $mongoSamples,
                     'mssql_samples' => $mssqlSamples,
-                    'mongo_count' => $this->getMongoDBCount($startDate, $endDate),
-                    'mssql_count' => $this->getMSSQLCount($startDate, $endDate)
+                    'mongo_count' => $this->getMongoDBCount_Patients($startDate, $endDate),
+                    'mssql_count' => $this->getMSSQLCount_Patients($startDate, $endDate)
                 ]
             ]);
             
@@ -434,6 +807,40 @@ class MigrationValidationController extends Controller
     }
 
     /**
+     * Get list of available tables for validation
+     */
+    public function getAvailableTables()
+    {
+        try {
+            $tables = [];
+            
+            foreach ($this->migrationTables as $tableName => $config) {
+                $tables[] = [
+                    'name' => $tableName,
+                    'mongodb_collection' => $config['mongodb_collection'],
+                    'mssql_table' => $config['mssql_table'],
+                    'pipeline_type' => $config['pipeline_type'],
+                    'identifier_field' => $config['identifier_field']
+                ];
+            }
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'tables' => $tables,
+                    'total' => count($tables)
+                ]
+            ]);
+            
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get available tables: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get validation history
      */
     public function getValidationHistory()
@@ -493,23 +900,40 @@ class MigrationValidationController extends Controller
             $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
             $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
             
-            $tables = ['patients']; // Add more tables as needed
-            
+            // Get all configured tables
+            $tables = array_keys($this->migrationTables);
             $results = [];
             
             foreach ($tables as $table) {
-                $mongodbCount = $this->getMongoDBCount($startDate, $endDate);
-                $mssqlCount = $this->getMSSQLCount($startDate, $endDate);
-                $difference = $mongodbCount - $mssqlCount;
-                
-                $results[] = [
-                    'table' => $table,
-                    'mongodb_count' => $mongodbCount,
-                    'mssql_count' => $mssqlCount,
-                    'difference' => $difference,
-                    'is_complete' => $difference === 0,
-                    'status' => $difference === 0 ? 'COMPLETE' : 'INCOMPLETE'
-                ];
+                try {
+                    $mongodbCount = $this->getMongoDBCount($startDate, $endDate, $table);
+                    $mssqlCount = $this->getMSSQLCount($startDate, $endDate, $table);
+                    $difference = $mongodbCount - $mssqlCount;
+                    
+                    $results[] = [
+                        'table' => $table,
+                        'mongodb_count' => $mongodbCount,
+                        'mssql_count' => $mssqlCount,
+                        'difference' => $difference,
+                        'is_complete' => $difference === 0,
+                        'status' => $difference === 0 ? 'COMPLETE' : 'INCOMPLETE'
+                    ];
+                } catch (Exception $tableException) {
+                    Log::error('Table validation failed', [
+                        'table' => $table,
+                        'error' => $tableException->getMessage()
+                    ]);
+                    
+                    $results[] = [
+                        'table' => $table,
+                        'mongodb_count' => 0,
+                        'mssql_count' => 0,
+                        'difference' => 0,
+                        'is_complete' => false,
+                        'status' => 'ERROR',
+                        'error' => $tableException->getMessage()
+                    ];
+                }
             }
             
             return response()->json([
@@ -519,7 +943,8 @@ class MigrationValidationController extends Controller
                     'summary' => [
                         'total_tables' => count($tables),
                         'complete_tables' => count(array_filter($results, function($r) { return $r['is_complete']; })),
-                        'incomplete_tables' => count(array_filter($results, function($r) { return !$r['is_complete']; }))
+                        'incomplete_tables' => count(array_filter($results, function($r) { return !$r['is_complete'] && !isset($r['error']); })),
+                        'error_tables' => count(array_filter($results, function($r) { return isset($r['error']); }))
                     ]
                 ]
             ]);
