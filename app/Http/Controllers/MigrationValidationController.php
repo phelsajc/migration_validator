@@ -46,6 +46,14 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'patientvisits' => [
+            'mongodb_collection' => 'patientvisits',
+            'mssql_table' => 'patientvisits',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -94,9 +102,6 @@ class MigrationValidationController extends Controller
                                 '$lte' => $endISODate
                             ]
                         ]
-                    ],
-                    [
-                        '$count' => 'Total'
                     ],[
                         '$lookup' => [
                             'from' => 'referencevalues',
@@ -143,7 +148,10 @@ class MigrationValidationController extends Controller
                             'foreignField' => '_id',
                             'as' => 'subSpecialtyDetails'
                         ]
-                    ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ],
                 ];
 
             case 'patientorderitems':
@@ -155,9 +163,6 @@ class MigrationValidationController extends Controller
                                 '$lte' => $endISODate
                             ],
                         ]
-                    ],
-                    [
-                        '$count' => 'Total'
                     ],
                     ['$unwind' => ['path' => '$patientorderitems', 'preserveNullAndEmptyArrays' => true]],
                     [
@@ -310,6 +315,9 @@ class MigrationValidationController extends Controller
                             'as' => 'frequencyDetails'
                         ]
                     ],
+                    [
+                        '$count' => 'Total'
+                    ],
                 ];
             case 'bedoccupancy':
                     return [
@@ -448,6 +456,76 @@ class MigrationValidationController extends Controller
                             '$count' => 'Total'
                         ],
                     ];
+            case 'patientvisits':
+                return [
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],[
+                        '$lookup' => [
+                            'as' => 'orgDetails',
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'as' => 'refDetails',
+                            'from' => 'referencevalues',
+                            'localField' => 'entypeuid',
+                            'foreignField' => '_id'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$refDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'as' => 'statusDetails',
+                            'from' => 'referencevalues',
+                            'localField' => 'visitstatusuid',
+                            'foreignField' => '_id'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$statusDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    
+                    [
+                        '$lookup' => [
+                            'as' => 'visitDetails',
+                            'from' => 'referencevalues',
+                            'localField' => 'visitcareproviders.visittypeuid',
+                            'foreignField' => '_id'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$visitDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
             default:
                 // Generic pipeline for simple tables
                 return [
