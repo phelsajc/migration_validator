@@ -91,13 +91,24 @@ return [
             'prefix_indexes' => true,
         ], */
 
-        'sqlsrv' => [
+        /* 'sqlsrv' => [
             'driver' => 'sqlsrv',
             'host' => env('DB_HOST_SQLSRV', '192.168.70.107'),
             'port' => env('DB_PORT_SQLSRV', '1433'),
             'database' => env('DB_DATABASE_SQLSRV', 'IQVIA_Staging'),
             'username' => env('DB_USERNAME_SQLSRV', 'sa'),
             'password' => env('DB_PASSWORD_SQLSRV', 's@password1'),
+            'charset' => 'utf8',
+            'prefix' => '',
+        ], */
+
+        'sqlsrv' => [
+            'driver' => 'sqlsrv',            
+            'host' => env('TESTING_HOST', '192.168.70.107'),
+            'port' => env('TESTING_PORT', '1433'),
+            'database' => env('TESTING_DATABASE', 'IQVIA_TESTING_ONLY'),
+            'username' => env('TESTING_USERNAME', 'sa'),
+            'password' => env('TESTING_PASSWORD', 's@password1'),
             'charset' => 'utf8',
             'prefix' => '',
         ],

@@ -197,13 +197,13 @@ class MigrationValidationController extends Controller
     private function getMSSQLCount($startDate, $endDate)
     {
         try {
-            // Convert ISO date strings to SQL Server datetime format
-            $startDateTime = Carbon::parse($startDate)->format('Y-m-d H:i:s');
-            $endDateTime = Carbon::parse($endDate)->format('Y-m-d H:i:s');
+            // Convert to UTC timezone to match migration filter
+            $startDateTime = Carbon::parse($startDate)->utc()->format('Y-m-d H:i:s');
+            $endDateTime = Carbon::parse($endDate)->utc()->format('Y-m-d H:i:s');
             
-            // Execute the SQL query
+            // Execute the SQL query - match the migration filter exactly
             $result = DB::connection('sqlsrv')
-                ->select("SELECT COUNT(*) as total FROM patients where CONVERT(datetime,modifieddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' between   '$startDateTime' and '$endDateTime'");
+                ->select("SELECT COUNT(*) as total FROM patients WHERE modifieddate >= '$startDateTime' AND modifieddate <= '$endDateTime'");
             
             return $result[0]->total ?? 0;
             
@@ -263,6 +263,172 @@ class MigrationValidationController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'Debug failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Find records that exist in MongoDB but not in MSSQL
+     */
+    public function findMissingRecords(Request $request)
+    {
+        try {
+            $startDateInput = $request->input('start_date', now()->format('Y-m-d'));
+            $endDateInput = $request->input('end_date', now()->format('Y-m-d'));
+            $limit = $request->input('limit', 50); // Limit results for performance
+            
+            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
+            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
+            
+            $startDateTime = Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s');
+            $endDateTime = Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s');
+            
+            // Get all MongoDB records for the date range
+            $mongoRecords = DB::connection('mongodb')
+                ->collection('patients')
+                ->where('modifiedat', '>=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000))
+                ->where('modifiedat', '<=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000))
+                //->limit($limit)
+                ->get()
+                ->toArray();
+            
+            // Get all MSSQL records for the date range
+            $mssqlRecords = DB::connection('sqlsrv')
+                ->select("SELECT modifieddate FROM patients WHERE CONVERT(datetime,modifieddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' BETWEEN '$startDateTime' AND '$endDateTime'");
+            
+            // Convert MSSQL dates to comparable format
+            $mssqlDates = array_map(function($record) {
+                return Carbon::parse($record->modifieddate)->format('Y-m-d H:i:s');
+            }, $mssqlRecords);
+            
+            // Find MongoDB records that don't have matching MSSQL records
+            $missingRecords = [];
+            $foundMatches = 0;
+            
+            foreach ($mongoRecords as $mongoRecord) {
+                $mongoDate = Carbon::parse($mongoRecord['modifiedat']->toDateTime())->format('Y-m-d H:i:s');
+                
+                // Check if this MongoDB record has a corresponding MSSQL record
+                $hasMatch = false;
+                foreach ($mssqlDates as $mssqlDate) {
+                    // Allow for small time differences (within 1 second)
+                    if (abs(Carbon::parse($mongoDate)->diffInSeconds(Carbon::parse($mssqlDate))) <= 1) {
+                        $hasMatch = true;
+                        $foundMatches++;
+                        break;
+                    }
+                }
+                
+                if (!$hasMatch) {
+                    $missingRecords[] = [
+                        'mongo_id' => $mongoRecord['_id'] ?? 'N/A',
+                        'mongo_modifiedat' => $mongoDate,
+                        'mongo_modifiedat_original' => $mongoRecord['modifiedat']->toDateTime()->format('Y-m-d H:i:s.u'),
+                        'patient_data' => [
+                            'mrn' => $mongoRecord['mrn'] ?? 'N/A',
+                            /* 'email' => $mongoRecord['email'] ?? 'N/A',
+                            'phone' => $mongoRecord['phone'] ?? 'N/A',
+                            'id' => $mongoRecord['patient_id'] ?? $mongoRecord['id'] ?? 'N/A' */
+                        ]
+                    ];
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'analysis' => [
+                    'date_range' => $startDateInput . ' to ' . $endDateInput,
+                    'mongo_total' => count($mongoRecords),
+                    'mssql_total' => count($mssqlRecords),
+                    'found_matches' => $foundMatches,
+                    'missing_from_mssql' => count($missingRecords),
+                    'missing_records' => $missingRecords
+                ]
+            ]);
+            
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Analysis failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Find records that exist in MSSQL but not in MongoDB
+     */
+    public function findExtraRecords(Request $request)
+    {
+        try {
+            $startDateInput = $request->input('start_date', now()->format('Y-m-d'));
+            $endDateInput = $request->input('end_date', now()->format('Y-m-d'));
+            $limit = $request->input('limit', 50);
+            
+            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
+            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
+            
+            $startDateTime = Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s');
+            $endDateTime = Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s');
+            
+            // Get all MongoDB records for the date range
+            $mongoRecords = DB::connection('mongodb')
+                ->collection('patients')
+                ->where('modifiedat', '>=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000))
+                ->where('modifiedat', '<=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000))
+                ->get()
+                ->toArray();
+            
+            // Get all MSSQL records for the date range
+            $mssqlRecords = DB::connection('sqlsrv')
+                ->select("SELECT TOP $limit modifieddate FROM patients WHERE CONVERT(datetime,modifieddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' BETWEEN '$startDateTime' AND '$endDateTime'");
+            
+            // Convert MongoDB dates to comparable format
+            $mongoDates = array_map(function($record) {
+                return Carbon::parse($record['modifiedat']->toDateTime())->format('Y-m-d H:i:s');
+            }, $mongoRecords);
+            
+            // Find MSSQL records that don't have matching MongoDB records
+            $extraRecords = [];
+            $foundMatches = 0;
+            
+            foreach ($mssqlRecords as $mssqlRecord) {
+                $mssqlDate = Carbon::parse($mssqlRecord->modifieddate)->format('Y-m-d H:i:s');
+                
+                // Check if this MSSQL record has a corresponding MongoDB record
+                $hasMatch = false;
+                foreach ($mongoDates as $mongoDate) {
+                    // Allow for small time differences (within 1 second)
+                    if (abs(Carbon::parse($mssqlDate)->diffInSeconds(Carbon::parse($mongoDate))) <= 1) {
+                        $hasMatch = true;
+                        $foundMatches++;
+                        break;
+                    }
+                }
+                
+                if (!$hasMatch) {
+                    $extraRecords[] = [
+                        'mssql_modifieddate' => $mssqlDate,
+                        'mssql_modifieddate_original' => $mssqlRecord->modifieddate
+                    ];
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'analysis' => [
+                    'date_range' => $startDateInput . ' to ' . $endDateInput,
+                    'mongo_total' => count($mongoRecords),
+                    'mssql_total' => count($mssqlRecords),
+                    'found_matches' => $foundMatches,
+                    'extra_in_mssql' => count($extraRecords),
+                    'extra_records' => $extraRecords
+                ]
+            ]);
+            
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Analysis failed: ' . $e->getMessage()
             ], 500);
         }
     }
