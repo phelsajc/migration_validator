@@ -118,6 +118,14 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'patientbills_paymentdetails' => [
+            'mongodb_collection' => 'patientbills',
+            'mssql_table' => 'patientbills_paymentdetails',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'insertedtimestamp',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -1288,6 +1296,54 @@ class MigrationValidationController extends Controller
                             'careproviderdata' => [
                                 '$ne' => null,
                             ],
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'patientbills_paymentdetails':
+                return [
+                    [
+                        '$unwind' => [
+                            'path' => '$paymentdetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'paymentdetails.paymentmodeuid',
+                            'foreignField' => '_id',
+                            'as' => 'paymentModeDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$paymentModeDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'paymentdetails.carddetails.cardtypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'cardDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$cardDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$match' => [
                             'modifiedat' => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
