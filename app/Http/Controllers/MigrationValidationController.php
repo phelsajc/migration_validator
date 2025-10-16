@@ -110,6 +110,14 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'patientbilldeductions_careprovider' => [
+            'mongodb_collection' => 'patientbilldeductions',
+            'mssql_table' => 'patientbilldeductions',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -1253,6 +1261,43 @@ class MigrationValidationController extends Controller
                             '$count' => 'Total'
                         ]
                     ];
+            case 'patientbilldeductions_careprovider':
+                return [
+                    [
+                        '$unwind' => [
+                            'path' => '$careproviderdata',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'as' => 'orgDetails',
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$match' => [
+                            'careproviderdata' => [
+                                '$ne' => null,
+                            ],
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
             default:
                 // Generic pipeline for simple tables
                 return [
