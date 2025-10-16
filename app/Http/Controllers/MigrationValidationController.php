@@ -182,6 +182,22 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'stock_returns_items' => [
+            'mongodb_collection' => 'stocktransferreturns',
+            'mssql_table' => 'stock_returns_items',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
+        'orderitemcodes' => [
+            'mongodb_collection' => 'orderitems',
+            'mssql_table' => 'orderitemcodes',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -2011,6 +2027,116 @@ class MigrationValidationController extends Controller
                             'path' => '$statusDetails',
                             'preserveNullAndEmptyArrays' => true,
                         ],
+                    ],
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'stock_returns_items':
+                return [
+                    [
+                        '$unwind' => [
+                            'path' => '$itemdetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'itemmasters',
+                            'localField' => 'itemdetails.itemmasteruid',
+                            'foreignField' => '_id',
+                            'as' => 'imDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$imDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'imDetails.itemcategoryuid',
+                            'foreignField' => '_id',
+                            'as' => 'imCatDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$imCatDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'itemdetails.statusuid',
+                            'foreignField' => '_id',
+                            'as' => 'statusDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$statusDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'orderitemcodes':
+                return [
+                    [
+                        '$unwind' => [
+                            'path' => '$orderitemcodes',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'orderitemcodes.orderitemcodetypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'orderItemDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orderItemDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
                     ],
                     [
                         '$match' => [
