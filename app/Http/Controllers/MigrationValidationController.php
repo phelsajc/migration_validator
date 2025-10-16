@@ -86,6 +86,14 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'patientpackages' => [
+            'mongodb_collection' => 'patientpackages',
+            'mssql_table' => 'patientpackages',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -844,6 +852,200 @@ class MigrationValidationController extends Controller
                                 '$count' => 'Total'
                             ]
                     ];            
+            case 'patientpackages ':
+                return [
+                                    [
+                                        '$match' => [
+                                            'modifiedat' => [
+                                                '$gte' => $startISODate,
+                                                '$lte' => $endISODate
+                                            ]
+                                        ]
+                                    ],  
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'users',
+                                            'localField' => 'careprovideruid',
+                                            'foreignField' => '_id',
+                                            'as' => 'usersDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$unwind' => [
+                                            'path' => '$usersDetails',
+                                            'preserveNullAndEmptyArrays' => true
+                                        ]
+                                    ],
+                        
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'patientvisits',
+                                            'localField' => 'patientvisituid',
+                                            'foreignField' => '_id',
+                                            'as' => 'pxvisitDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$unwind' => [
+                                            'path' => '$pxvisitDetails',
+                                            'preserveNullAndEmptyArrays' => true
+                                        ]
+                                    ],                        
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'ordersets',
+                                            'localField' => 'ordersetuid',
+                                            'foreignField' => '_id',
+                                            'as' => 'orderSetDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$unwind' => [
+                                            'path' => '$orderSetDetails',
+                                            'preserveNullAndEmptyArrays' => true
+                                        ]
+                                    ],                        
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'organisations',
+                                            'localField' => 'orguid',
+                                            'foreignField' => '_id',
+                                            'as' => 'orgDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$unwind' => [
+                                            'path' => '$orgDetails',
+                                            'preserveNullAndEmptyArrays' => true
+                                        ]
+                                    ],
+                        
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'referencevalues',
+                                            'localField' => 'pxvisitDetails.entypeuid',
+                                            'foreignField' => '_id',
+                                            'as' => 'refDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$unwind' => [
+                                            'path' => '$refDetails',
+                                            'preserveNullAndEmptyArrays' => true
+                                        ]
+                                    ],                        
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'tariffs',
+                                            'localField' => 'tariffuid',
+                                            'foreignField' => '_id',
+                                            'as' => 'tarrifDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$unwind' => [
+                                            'path' => '$tarrifDetails',
+                                            'preserveNullAndEmptyArrays' => true
+                                        ]
+                                    ],
+                        
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'billinggroups',
+                                            'localField' => 'tarrifDetails.billinggroupuid',
+                                            'foreignField' => '_id',
+                                            'as' => 'billingGrpDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$unwind' => [
+                                            'path' => '$billingGrpDetails',
+                                            'preserveNullAndEmptyArrays' => true
+                                        ]
+                                    ],
+                        
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'billinggroups',
+                                            'localField' => 'tarrifDetails.billingsubgroupuid',
+                                            'foreignField' => '_id',
+                                            'as' => 'billingSubGrpDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$unwind' => [
+                                            'path' => '$billingSubGrpDetails',
+                                            'preserveNullAndEmptyArrays' => true
+                                        ]
+                                    ],
+                        
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'departments',
+                                            'localField' => 'orderSetDetails.ordertodepartmentuid',
+                                            'foreignField' => '_id',
+                                            'as' => 'departmentDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$unwind' => [
+                                            'path' => '$departmentDetails',
+                                            'preserveNullAndEmptyArrays' => true
+                                        ]
+                                    ],
+                                    [
+                                        '$addFields' => [
+                                            'deletedAudit' => [
+                                                '$filter' => [
+                                                    'input' => '$auditlogs',
+                                                    'as' => 'log',
+                                                    'cond' => [
+                                                        '$eq' => ['$$log.comments', 'DELETED']
+                                                    ]
+                                                ]
+                                            ]
+                                        ]
+                                    ],                         
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'tariffs',
+                                            'localField' => 'ordersetuid',
+                                            'foreignField' => 'ordersetuid',
+                                            'as' => 'orderPckgSetDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'billinggroups',
+                                            'localField' => 'orderPckgSetDetails.billinggroupuid',
+                                            'foreignField' => '_id',
+                                            'as' => 'billingGrpSetDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$unwind' => [
+                                            'path' => '$billingGrpSetDetails',
+                                            'preserveNullAndEmptyArrays' => true
+                                        ]
+                                    ],
+                                    [
+                                        '$lookup' => [
+                                            'from' => 'billinggroups',
+                                            'localField' => 'orderPckgSetDetails.billingsubgroupuid',
+                                            'foreignField' => '_id',
+                                            'as' => 'billingSubGrpSetDetails'
+                                        ]
+                                    ],
+                                    [
+                                        '$unwind' => [
+                                            'path' => '$billingSubGrpSetDetails',
+                                            'preserveNullAndEmptyArrays' => true
+                                        ]
+                                    ],     
+                                    [
+                                        '$count' => 'Total'
+                                    ]
+                            ];            
             default:
                 // Generic pipeline for simple tables
                 return [
