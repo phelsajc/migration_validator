@@ -158,6 +158,14 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'stock_trans_iss' => [
+            'mongodb_collection' => 'stocktransfers',
+            'mssql_table' => 'stock_trans_iss',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -1700,6 +1708,104 @@ class MigrationValidationController extends Controller
                         '$unwind' => [
                             'path' => '$orgDetails',
                             'preserveNullAndEmptyArrays' => true,
+                        ]
+                    ],
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'stock_trans_iss':
+                return [
+                    [
+                        '$lookup' => [
+                            'from' => 'inventorystores',
+                            'localField' => 'fromstoreuid',
+                            'foreignField' => '_id',
+                            'as' => 'invDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$invDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'invDetails.departmentuid',
+                            'foreignField' => '_id',
+                            'as' => 'deptDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$deptDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'inventorystores',
+                            'localField' => 'tostoreuid',
+                            'foreignField' => '_id',
+                            'as' => 'invToDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$invToDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'invToDetails.departmentuid',
+                            'foreignField' => '_id',
+                            'as' => 'deptToDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$deptToDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'todeptuid',
+                            'foreignField' => '_id',
+                            'as' => 'toDeptToDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$toDeptToDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
                         ]
                     ],
                     [
