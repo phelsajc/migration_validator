@@ -94,6 +94,14 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'patientpackages_orderitems' => [
+            'mongodb_collection' => 'patientpackages',
+            'mssql_table' => 'patientpackagesorderitems',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'insertedtimestamp',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -116,7 +124,7 @@ class MigrationValidationController extends Controller
         $startISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000);
         $endISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000);
 
-        switch($tableName) {
+        switch ($tableName) {
             case 'patients':
                 return [
                     [
@@ -134,24 +142,30 @@ class MigrationValidationController extends Controller
                             'foreignField' => "_id",
                             'localField' => "maritalstatusuid"
                         ]
-                    ],        
-                    ['$lookup' => [
-                        'from' => 'organisations',
-                        'localField' => 'orguid',
-                        'foreignField' => '_id',
-                        'as' => 'orgDetails'
-                    ]],
-                    ['$unwind' => [
-                        'path' => '$orgDetails',
-                        'preserveNullAndEmptyArrays' => true
-                    ]],
-        
-                    ['$lookup' => [
-                        'from' => 'patientadditionaldetails',
-                        'localField' => '_id',
-                        'foreignField' => 'patientuid',
-                        'as' => 'additionalDetails'
-                    ]],                    
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+
+                    [
+                        '$lookup' => [
+                            'from' => 'patientadditionaldetails',
+                            'localField' => '_id',
+                            'foreignField' => 'patientuid',
+                            'as' => 'additionalDetails'
+                        ]
+                    ],
                     [
                         '$match' => [
                             $config['date_field_mongo'] => [
@@ -174,7 +188,8 @@ class MigrationValidationController extends Controller
                                 '$lte' => $endISODate
                             ]
                         ]
-                    ],[
+                    ],
+                    [
                         '$lookup' => [
                             'from' => 'referencevalues',
                             'localField' => 'genderuid',
@@ -183,7 +198,7 @@ class MigrationValidationController extends Controller
                         ]
                     ],
                     ['$unwind' => ['path' => '$genderDetails', 'preserveNullAndEmptyArrays' => true]],
-        
+
                     [
                         '$lookup' => [
                             'from' => 'referencevalues',
@@ -193,7 +208,7 @@ class MigrationValidationController extends Controller
                         ]
                     ],
                     ['$unwind' => ['path' => '$specialtyDetails', 'preserveNullAndEmptyArrays' => true]],
-        
+
                     [
                         '$lookup' => [
                             'from' => 'referencevalues',
@@ -202,7 +217,7 @@ class MigrationValidationController extends Controller
                             'as' => 'phicnoDetails'
                         ]
                     ],
-        
+
                     [
                         '$lookup' => [
                             'from' => 'organisations',
@@ -212,7 +227,7 @@ class MigrationValidationController extends Controller
                         ]
                     ],
                     ['$unwind' => ['path' => '$orgDetails', 'preserveNullAndEmptyArrays' => true]],
-        
+
                     [
                         '$lookup' => [
                             'from' => 'referencevalues',
@@ -300,7 +315,7 @@ class MigrationValidationController extends Controller
                         ]
                     ],
                     ['$unwind' => ['path' => '$payorDetails', 'preserveNullAndEmptyArrays' => true]],
-        
+
                     [
                         '$lookup' => [
                             'from' => 'wards',
@@ -356,7 +371,7 @@ class MigrationValidationController extends Controller
                             'path' => '$tariffDetails',
                             'preserveNullAndEmptyArrays' => true
                         ]
-                    ],  
+                    ],
                     [
                         '$lookup' => [
                             'from' => 'users',
@@ -392,142 +407,143 @@ class MigrationValidationController extends Controller
                     ],
                 ];
             case 'bedoccupancy':
-                    return [
-                        [
-                            '$match' => [
-                                $config['date_field_mongo'] => [
-                                    '$gte' => $startISODate,
-                                    '$lte' => $endISODate
+                return [
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$match' => [
+                            'bedoccupancy' => [
+                                '$exists' => true,
+                                '$ne' => []
+                            ]
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$bedoccupancy',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'beds',
+                            'localField' => 'bedoccupancy.beduid',
+                            'foreignField' => '_id',
+                            'as' => 'bedsDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$bedsDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$addFields' => [
+                            'resolvedWardUid' => [
+                                '$ifNull' => [
+                                    '$bedoccupancy.warduid',
+                                    '$bedsDetails.warduid'
                                 ]
                             ]
-                        ],
-                        [
-                            '$match' => [
-                                'bedoccupancy' => [
-                                    '$exists' => true,
-                                    '$ne' => []
-                                ]
-                            ]
-                        ],[
-                            '$unwind' => [
-                                'path' => '$bedoccupancy',
-                                'preserveNullAndEmptyArrays' => true
-                            ]
-                        ],
-                        [
-                            '$lookup' => [
-                                'from' => 'beds',
-                                'localField' => 'bedoccupancy.beduid',
-                                'foreignField' => '_id',
-                                'as' => 'bedsDetails'
-                            ]
-                        ],
-                        [
-                            '$unwind' => [
-                                'path' => '$bedsDetails',
-                                'preserveNullAndEmptyArrays' => true
-                            ]
-                        ],
-                        [
-                            '$addFields' => [
-                                'resolvedWardUid' => [
-                                    '$ifNull' => [
-                                        '$bedoccupancy.warduid',
-                                        '$bedsDetails.warduid'
-                                    ]
-                                ]
-                            ]
-                        ],
-            
-                        [
-                            '$lookup' => [
-                                'from' => 'organisations',
-                                'localField' => 'orguid',
-                                'foreignField' => '_id',
-                                'as' => 'orgDetails'
-                            ]
-                        ],
-                        [
-                            '$unwind' => [
-                                'path' => '$orgDetails',
-                                'preserveNullAndEmptyArrays' => true
-                            ]
-                        ],
-                        [
-                            '$lookup' => [
-                                'from' => 'wards',
-                                'localField' => 'resolvedWardUid',
-                                'foreignField' => '_id',
-                                'as' => 'stnDetails'
-                            ]
-                        ],
-                        [
-                            '$unwind' => [
-                                'path' => '$stnDetails',
-                                'preserveNullAndEmptyArrays' => true
-                            ]
-                        ],
-                        [
-                            '$lookup' => [
-                                'from' => 'locations',
-                                'localField' => 'bedsDetails.roomuid',
-                                'foreignField' => '_id',
-                                'as' => 'locDetails'
-                            ]
-                        ],
-                        [
-                            '$unwind' => [
-                                'path' => '$locDetails',
-                                'preserveNullAndEmptyArrays' => true
-                            ]
-                        ],
-                        [
-                            '$lookup' => [
-                                'from' => 'referencevalues',
-                                'localField' => 'bedoccupancy.bedcategoryuid',
-                                'foreignField' => '_id',
-                                'as' => 'refDetails'
-                            ]
-                        ],
-                        [
-                            '$unwind' => [
-                                'path' => '$refDetails',
-                                'preserveNullAndEmptyArrays' => true
-                            ]
-                        ],
-            
-                        [
-                            '$lookup' => [
-                                'from' => 'beds',
-                                'localField' => 'bedoccupancy.beduid',
-                                'foreignField' => '_id',
-                                'as' => 'bedParentDetails'
-                            ]
-                        ],
-                        [
-                            '$unwind' => [
-                                'path' => '$bedParentDetails',
-                                'preserveNullAndEmptyArrays' => true
-                            ]
-                        ],
-                        [
-                            '$lookup' => [
-                                'from' => 'departments',
-                                'localField' => 'bedParentDetails.owningdeptuid',
-                                'foreignField' => '_id',
-                                'as' => 'depOwningDetails'
-                            ]
-                        ],
-                        [
-                            '$unwind' => [
-                                'path' => '$depOwningDetails',
-                                'preserveNullAndEmptyArrays' => true
-                            ]
-                        ],
-                        [
-                            '$count' => 'Total'
-                        ],
-                    ];
+                        ]
+                    ],
+
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'wards',
+                            'localField' => 'resolvedWardUid',
+                            'foreignField' => '_id',
+                            'as' => 'stnDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$stnDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'locations',
+                            'localField' => 'bedsDetails.roomuid',
+                            'foreignField' => '_id',
+                            'as' => 'locDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$locDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'bedoccupancy.bedcategoryuid',
+                            'foreignField' => '_id',
+                            'as' => 'refDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$refDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+
+                    [
+                        '$lookup' => [
+                            'from' => 'beds',
+                            'localField' => 'bedoccupancy.beduid',
+                            'foreignField' => '_id',
+                            'as' => 'bedParentDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$bedParentDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'bedParentDetails.owningdeptuid',
+                            'foreignField' => '_id',
+                            'as' => 'depOwningDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$depOwningDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ],
+                ];
             case 'patientvisits':
                 return [
                     [
@@ -537,7 +553,8 @@ class MigrationValidationController extends Controller
                                 '$lte' => $endISODate
                             ]
                         ]
-                    ],[
+                    ],
+                    [
                         '$lookup' => [
                             'as' => 'orgDetails',
                             'from' => 'organisations',
@@ -579,7 +596,7 @@ class MigrationValidationController extends Controller
                             'preserveNullAndEmptyArrays' => true
                         ]
                     ],
-                    
+
                     [
                         '$lookup' => [
                             'as' => 'visitDetails',
@@ -668,7 +685,7 @@ class MigrationValidationController extends Controller
                         '$count' => 'Total'
                     ]
                 ];
-            case 'dischargeprocesses ':
+            case 'dischargeprocesses':
                 return [
                     [
                         '$match' => [
@@ -719,333 +736,375 @@ class MigrationValidationController extends Controller
                             'path' => '$medDschDetails',
                             'preserveNullAndEmptyArrays' => true
                         ]
-                    ],                    
+                    ],
                     [
                         '$count' => 'Total'
                     ]
-                ];   
-            case 'patientbills ':
+                ];
+            case 'patientbills':
                 return [
-                        [
-                            '$match' => [
-                                'modifiedat' => [
-                                    '$gte' => $startISODate,
-                                    '$lte' => $endISODate
-                                ]
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
                             ]
-                        ],
-                        [
-                            '$lookup' => [
-                                'as' => "entypeDetails",
-                                'from' => "referencevalues",
-                                'foreignField' => "_id",
-                                'localField' => "entypeuid"
-                            ]
-                        ],
-                        ['$unwind' => ['path' => '$entypeDetails']],
-                        [
-                            '$lookup' => [
-                                'as' => "patientvisitsDetails",
-                                'from' => "patientvisits",
-                                'foreignField' => "_id",
-                                'localField' => "patientvisituid"
-                            ]
-                        ],
-                        ['$unwind' => ['path' => '$patientvisitsDetails']],
-                        ['$lookup' => [
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'as' => "entypeDetails",
+                            'from' => "referencevalues",
+                            'foreignField' => "_id",
+                            'localField' => "entypeuid"
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$entypeDetails']],
+                    [
+                        '$lookup' => [
+                            'as' => "patientvisitsDetails",
+                            'from' => "patientvisits",
+                            'foreignField' => "_id",
+                            'localField' => "patientvisituid"
+                        ]
+                    ],
+                    ['$unwind' => ['path' => '$patientvisitsDetails']],
+                    [
+                        '$lookup' => [
                             'from' => 'organisations',
                             'localField' => 'orguid',
                             'foreignField' => '_id',
                             'as' => 'orgDetails'
-                        ]],
-                        ['$unwind' => [
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
                             'path' => '$orgDetails',
                             'preserveNullAndEmptyArrays' => true
-                        ]],
-                        ['$lookup' => [
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
                             'from' => 'departments',
                             'localField' => 'userdepartmentuid',
                             'foreignField' => '_id',
                             'as' => 'UserDeptDetails'
-                        ]],
-                        ['$unwind' => [
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
                             'path' => '$UserDeptDetails',
                             'preserveNullAndEmptyArrays' => true
-                        ]],                 
-                        [
-                            '$count' => 'Total'
                         ]
-                ];    
-            case 'patientprocedures ':
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'patientprocedures':
                 return [
-                            [
-                                '$match' => [
-                                    'modifiedat' => [
-                                        '$gte' => $startISODate,
-                                        '$lte' => $endISODate
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$procedures',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'departmentuid',
+                            'foreignField' => '_id',
+                            'as' => 'departmentsDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$departmentsDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'users',
+                            'localField' => 'careprovideruid',
+                            'foreignField' => '_id',
+                            'as' => 'careproviderDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$careproviderDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'procedures',
+                            'localField' => 'procedures.procedureuid',
+                            'foreignField' => '_id',
+                            'as' => 'proceduresDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$proceduresDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'patientpackages':
+                return [
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'users',
+                            'localField' => 'careprovideruid',
+                            'foreignField' => '_id',
+                            'as' => 'usersDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$usersDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+
+                    [
+                        '$lookup' => [
+                            'from' => 'patientvisits',
+                            'localField' => 'patientvisituid',
+                            'foreignField' => '_id',
+                            'as' => 'pxvisitDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$pxvisitDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'ordersets',
+                            'localField' => 'ordersetuid',
+                            'foreignField' => '_id',
+                            'as' => 'orderSetDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orderSetDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'pxvisitDetails.entypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'refDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$refDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'tariffs',
+                            'localField' => 'tariffuid',
+                            'foreignField' => '_id',
+                            'as' => 'tarrifDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$tarrifDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'tarrifDetails.billinggroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'billingGrpDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$billingGrpDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'tarrifDetails.billingsubgroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'billingSubGrpDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$billingSubGrpDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+
+                    [
+                        '$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'orderSetDetails.ordertodepartmentuid',
+                            'foreignField' => '_id',
+                            'as' => 'departmentDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$departmentDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$addFields' => [
+                            'deletedAudit' => [
+                                '$filter' => [
+                                    'input' => '$auditlogs',
+                                    'as' => 'log',
+                                    'cond' => [
+                                        '$eq' => ['$$log.comments', 'DELETED']
                                     ]
                                 ]
-                            ],  
-                            [
-                                '$unwind' => [
-                                    'path' => '$procedures',
-                                    'preserveNullAndEmptyArrays' => true,
-                                ],
-                            ],
-                            [
-                                '$lookup' => [
-                                    'from' => 'departments',
-                                    'localField' => 'departmentuid',
-                                    'foreignField' => '_id',
-                                    'as' => 'departmentsDetails',
-                                ],
-                            ],
-                            [
-                                '$unwind' => [
-                                    'path' => '$departmentsDetails',
-                                    'preserveNullAndEmptyArrays' => true,
-                                ],
-                            ],
-                            [
-                                '$lookup' => [
-                                    'from' => 'users',
-                                    'localField' => 'careprovideruid',
-                                    'foreignField' => '_id',
-                                    'as' => 'careproviderDetails',
-                                ],
-                            ],
-                            [
-                                '$unwind' => [
-                                    'path' => '$careproviderDetails',
-                                    'preserveNullAndEmptyArrays' => true,
-                                ],
-                            ],
-                            [
-                                '$lookup' => [
-                                    'from' => 'procedures',
-                                    'localField' => 'procedures.procedureuid',
-                                    'foreignField' => '_id',
-                                    'as' => 'proceduresDetails',
-                                ],
-                            ],
-                            [
-                                '$unwind' => [
-                                    'path' => '$proceduresDetails',
-                                    'preserveNullAndEmptyArrays' => true,
-                                ],
-                            ],
-                            [
-                                '$lookup' => [
-                                    'from' => 'organisations',
-                                    'localField' => 'orguid',
-                                    'foreignField' => '_id',
-                                    'as' => 'orgDetails',
-                                ],
-                            ],
-                            [
-                                '$unwind' => [
-                                    'path' => '$orgDetails',
-                                    'preserveNullAndEmptyArrays' => true,
-                                ],
-                            ],            
-                            [
-                                '$count' => 'Total'
                             ]
-                    ];            
-            case 'patientpackages ':
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'tariffs',
+                            'localField' => 'ordersetuid',
+                            'foreignField' => 'ordersetuid',
+                            'as' => 'orderPckgSetDetails'
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'orderPckgSetDetails.billinggroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'billingGrpSetDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$billingGrpSetDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'orderPckgSetDetails.billingsubgroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'billingSubGrpSetDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$billingSubGrpSetDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'patientpackages_orderitems':
                 return [
-                                    [
-                                        '$match' => [
-                                            'modifiedat' => [
-                                                '$gte' => $startISODate,
-                                                '$lte' => $endISODate
-                                            ]
-                                        ]
-                                    ],  
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'users',
-                                            'localField' => 'careprovideruid',
-                                            'foreignField' => '_id',
-                                            'as' => 'usersDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$unwind' => [
-                                            'path' => '$usersDetails',
-                                            'preserveNullAndEmptyArrays' => true
-                                        ]
-                                    ],
-                        
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'patientvisits',
-                                            'localField' => 'patientvisituid',
-                                            'foreignField' => '_id',
-                                            'as' => 'pxvisitDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$unwind' => [
-                                            'path' => '$pxvisitDetails',
-                                            'preserveNullAndEmptyArrays' => true
-                                        ]
-                                    ],                        
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'ordersets',
-                                            'localField' => 'ordersetuid',
-                                            'foreignField' => '_id',
-                                            'as' => 'orderSetDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$unwind' => [
-                                            'path' => '$orderSetDetails',
-                                            'preserveNullAndEmptyArrays' => true
-                                        ]
-                                    ],                        
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'organisations',
-                                            'localField' => 'orguid',
-                                            'foreignField' => '_id',
-                                            'as' => 'orgDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$unwind' => [
-                                            'path' => '$orgDetails',
-                                            'preserveNullAndEmptyArrays' => true
-                                        ]
-                                    ],
-                        
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'referencevalues',
-                                            'localField' => 'pxvisitDetails.entypeuid',
-                                            'foreignField' => '_id',
-                                            'as' => 'refDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$unwind' => [
-                                            'path' => '$refDetails',
-                                            'preserveNullAndEmptyArrays' => true
-                                        ]
-                                    ],                        
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'tariffs',
-                                            'localField' => 'tariffuid',
-                                            'foreignField' => '_id',
-                                            'as' => 'tarrifDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$unwind' => [
-                                            'path' => '$tarrifDetails',
-                                            'preserveNullAndEmptyArrays' => true
-                                        ]
-                                    ],
-                        
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'billinggroups',
-                                            'localField' => 'tarrifDetails.billinggroupuid',
-                                            'foreignField' => '_id',
-                                            'as' => 'billingGrpDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$unwind' => [
-                                            'path' => '$billingGrpDetails',
-                                            'preserveNullAndEmptyArrays' => true
-                                        ]
-                                    ],
-                        
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'billinggroups',
-                                            'localField' => 'tarrifDetails.billingsubgroupuid',
-                                            'foreignField' => '_id',
-                                            'as' => 'billingSubGrpDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$unwind' => [
-                                            'path' => '$billingSubGrpDetails',
-                                            'preserveNullAndEmptyArrays' => true
-                                        ]
-                                    ],
-                        
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'departments',
-                                            'localField' => 'orderSetDetails.ordertodepartmentuid',
-                                            'foreignField' => '_id',
-                                            'as' => 'departmentDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$unwind' => [
-                                            'path' => '$departmentDetails',
-                                            'preserveNullAndEmptyArrays' => true
-                                        ]
-                                    ],
-                                    [
-                                        '$addFields' => [
-                                            'deletedAudit' => [
-                                                '$filter' => [
-                                                    'input' => '$auditlogs',
-                                                    'as' => 'log',
-                                                    'cond' => [
-                                                        '$eq' => ['$$log.comments', 'DELETED']
-                                                    ]
-                                                ]
-                                            ]
-                                        ]
-                                    ],                         
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'tariffs',
-                                            'localField' => 'ordersetuid',
-                                            'foreignField' => 'ordersetuid',
-                                            'as' => 'orderPckgSetDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'billinggroups',
-                                            'localField' => 'orderPckgSetDetails.billinggroupuid',
-                                            'foreignField' => '_id',
-                                            'as' => 'billingGrpSetDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$unwind' => [
-                                            'path' => '$billingGrpSetDetails',
-                                            'preserveNullAndEmptyArrays' => true
-                                        ]
-                                    ],
-                                    [
-                                        '$lookup' => [
-                                            'from' => 'billinggroups',
-                                            'localField' => 'orderPckgSetDetails.billingsubgroupuid',
-                                            'foreignField' => '_id',
-                                            'as' => 'billingSubGrpSetDetails'
-                                        ]
-                                    ],
-                                    [
-                                        '$unwind' => [
-                                            'path' => '$billingSubGrpSetDetails',
-                                            'preserveNullAndEmptyArrays' => true
-                                        ]
-                                    ],     
-                                    [
-                                        '$count' => 'Total'
-                                    ]
-                            ];            
+                    [
+                        '$unwind' => [
+                            'path' => '$orderitems',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
             default:
                 // Generic pipeline for simple tables
                 return [
@@ -1071,22 +1130,22 @@ class MigrationValidationController extends Controller
     {
         try {
             $tableName = $request->input('table', 'patients');
-            
+
             if (!isset($this->migrationTables[$tableName])) {
                 return response()->json([
                     'success' => false,
                     'error' => "Table '{$tableName}' is not configured for validation"
                 ], 400);
             }
-            
+
             // Handle both GET and POST requests with proper date formatting
             $startDateInput = $request->input('start_date', $request->query('start_date', now()->format('Y-m-d')));
             $endDateInput = $request->input('end_date', $request->query('end_date', now()->format('Y-m-d')));
-            
+
             // Format dates properly for MongoDB
             $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
             $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
-            
+
             // Log the formatted dates for debugging
             Log::info('Date formatting', [
                 'table' => $tableName,
@@ -1095,13 +1154,13 @@ class MigrationValidationController extends Controller
                 'start_date_formatted' => $startDate,
                 'end_date_formatted' => $endDate
             ]);
-            
+
             // Get MongoDB count using the provided pipeline
             $mongodbCount = $this->getMongoDBCount($startDate, $endDate, $tableName);
-            
+
             // Get MSSQL count
             $mssqlCount = $this->getMSSQLCount($startDate, $endDate, $tableName);
-            
+
             // Log the counts for debugging
             Log::info('Validation counts', [
                 'table' => $tableName,
@@ -1110,11 +1169,11 @@ class MigrationValidationController extends Controller
                 'difference' => $mongodbCount - $mssqlCount,
                 'date_range' => $startDateInput . ' to ' . $endDateInput
             ]);
-            
+
             // Calculate difference
             $difference = $mongodbCount - $mssqlCount;
             $isComplete = $difference === 0;
-            
+
             $result = [
                 'table' => $tableName,
                 'mongodb_count' => $mongodbCount,
@@ -1126,18 +1185,18 @@ class MigrationValidationController extends Controller
                 'validated_at' => now()->toISOString(),
                 'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE'
             ];
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $result
             ]);
-            
+
         } catch (Exception $e) {
             Log::error('Migration validation error', [
                 'table' => $request->input('table', 'patients'),
                 'error' => $e->getMessage()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'error' => 'Validation failed: ' . $e->getMessage()
@@ -1154,11 +1213,11 @@ class MigrationValidationController extends Controller
             // Handle both GET and POST requests with proper date formatting
             $startDateInput = $request->input('start_date', $request->query('start_date', now()->format('Y-m-d')));
             $endDateInput = $request->input('end_date', $request->query('end_date', now()->format('Y-m-d')));
-            
+
             // Format dates properly for MongoDB
             $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
             $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
-            
+
             // Log the formatted dates for debugging
             Log::info('Date formatting', [
                 'start_date_input' => $startDateInput,
@@ -1168,13 +1227,13 @@ class MigrationValidationController extends Controller
                 'start_date_sql' => Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s'),
                 'end_date_sql' => Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s')
             ]);
-            
+
             // Get MongoDB count using the provided pipeline
             $mongodbCount = $this->getMongoDBCount_Patients($startDate, $endDate);
-            
+
             // Get MSSQL count
             $mssqlCount = $this->getMSSQLCount_Patients($startDate, $endDate);
-            
+
             // Log the counts for debugging
             Log::info('Validation counts', [
                 'mongodb_count' => $mongodbCount,
@@ -1182,11 +1241,11 @@ class MigrationValidationController extends Controller
                 'difference' => $mongodbCount - $mssqlCount,
                 'date_range' => $startDateInput . ' to ' . $endDateInput
             ]);
-            
+
             // Calculate difference
             $difference = $mongodbCount - $mssqlCount;
             $isComplete = $difference === 0;
-            
+
             $result = [
                 'table' => 'patients',
                 'mongodb_count' => $mongodbCount,
@@ -1198,15 +1257,15 @@ class MigrationValidationController extends Controller
                 'validated_at' => now()->toISOString(),
                 'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE'
             ];
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $result
             ]);
-            
+
         } catch (Exception $e) {
             Log::error('Migration validation error: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'error' => 'Validation failed: ' . $e->getMessage()
@@ -1222,31 +1281,31 @@ class MigrationValidationController extends Controller
         try {
             // Increase execution time limit
             set_time_limit(300);
-            
+
             Log::info('Starting MongoDB count query', [
                 'table' => $tableName,
                 'start_date' => $startDate,
                 'end_date' => $endDate
             ]);
-            
+
             $config = $this->migrationTables[$tableName];
             $pipeline = $this->getPipelineForTable($tableName, $startDate, $endDate);
-            
+
             // Method 1: Try simple count first for simple pipelines
             if ($config['pipeline_type'] === 'simple') {
                 try {
                     $startISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000);
                     $endISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000);
-                    
+
                     $count = DB::connection('mongodb')
                         ->collection($config['mongodb_collection'])
                         ->where($config['date_field_mongo'], '>=', $startISODate)
                         ->where($config['date_field_mongo'], '<=', $endISODate)
                         ->count();
-                    
+
                     Log::info('MongoDB simple count completed', ['table' => $tableName, 'count' => $count]);
                     return $count;
-                    
+
                 } catch (Exception $countException) {
                     Log::warning('Simple count failed, trying aggregation', [
                         'table' => $tableName,
@@ -1254,7 +1313,7 @@ class MigrationValidationController extends Controller
                     ]);
                 }
             }
-            
+
             // Method 2: Use aggregation pipeline
             $result = DB::connection('mongodb')
                 ->collection($config['mongodb_collection'])
@@ -1265,11 +1324,11 @@ class MigrationValidationController extends Controller
                         'batchSize' => 1000
                     ]);
                 })->toArray();
-            
+
             $count = isset($result[0]['Total']) ? $result[0]['Total'] : 0;
             Log::info('MongoDB aggregation count completed', ['table' => $tableName, 'count' => $count]);
             return $count;
-            
+
         } catch (Exception $e) {
             Log::error('MongoDB count error', [
                 'table' => $tableName,
@@ -1286,17 +1345,17 @@ class MigrationValidationController extends Controller
     {
         try {
             $config = $this->migrationTables[$tableName];
-            
+
             // Convert to UTC timezone to match migration filter
             $startDateTime = Carbon::parse($startDate)->utc()->format('Y-m-d H:i:s');
             $endDateTime = Carbon::parse($endDate)->utc()->format('Y-m-d H:i:s');
-            
+
             // Execute the SQL query - match the migration filter exactly
             $result = DB::connection('sqlsrv')
                 ->select("SELECT COUNT(*) as total FROM {$config['mssql_table']} WHERE {$config['date_field_mssql']} >= '$startDateTime' AND {$config['date_field_mssql']} <= '$endDateTime'");
-            
+
             return $result[0]->total ?? 0;
-            
+
         } catch (Exception $e) {
             Log::error('MSSQL count error', [
                 'table' => $tableName,
@@ -1315,13 +1374,13 @@ class MigrationValidationController extends Controller
             // Convert to UTC timezone to match migration filter
             $startDateTime = Carbon::parse($startDate)->utc()->format('Y-m-d H:i:s');
             $endDateTime = Carbon::parse($endDate)->utc()->format('Y-m-d H:i:s');
-            
+
             // Execute the SQL query - match the migration filter exactly
             $result = DB::connection('sqlsrv')
                 ->select("SELECT COUNT(*) as total FROM patients WHERE modifieddate >= '$startDateTime' AND modifieddate <= '$endDateTime'");
-            
+
             return $result[0]->total ?? 0;
-            
+
         } catch (Exception $e) {
             Log::error('MSSQL count error: ' . $e->getMessage());
             throw new Exception('Failed to get MSSQL count: ' . $e->getMessage());
@@ -1337,21 +1396,21 @@ class MigrationValidationController extends Controller
             $tableName = $request->input('table', 'careproviders');
             $startDateInput = $request->input('start_date', now()->format('Y-m-d'));
             $endDateInput = $request->input('end_date', now()->format('Y-m-d'));
-            
+
             if (!isset($this->migrationTables[$tableName])) {
                 return response()->json([
                     'success' => false,
                     'error' => "Table '{$tableName}' not configured"
                 ], 400);
             }
-            
+
             $config = $this->migrationTables[$tableName];
             $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
             $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
-            
+
             $startISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000);
             $endISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000);
-            
+
             // Get sample records to see what's being matched
             $sampleRecords = DB::connection('mongodb')
                 ->collection($config['mongodb_collection'])
@@ -1360,21 +1419,21 @@ class MigrationValidationController extends Controller
                 ->limit(5)
                 ->get()
                 ->toArray();
-            
+
             // Get total count
             $totalCount = DB::connection('mongodb')
                 ->collection($config['mongodb_collection'])
                 ->where($config['date_field_mongo'], '>=', $startISODate)
                 ->where($config['date_field_mongo'], '<=', $endISODate)
                 ->count();
-            
+
             // Get all records with their dates for debugging
             $allRecords = DB::connection('mongodb')
                 ->collection($config['mongodb_collection'])
                 ->limit(20)
                 ->get()
                 ->toArray();
-            
+
             $formattedRecords = [];
             foreach ($allRecords as $record) {
                 if (isset($record[$config['date_field_mongo']])) {
@@ -1387,7 +1446,7 @@ class MigrationValidationController extends Controller
                     ];
                 }
             }
-            
+
             return response()->json([
                 'success' => true,
                 'debug_info' => [
@@ -1406,7 +1465,7 @@ class MigrationValidationController extends Controller
                     'all_records_sample' => $formattedRecords
                 ]
             ]);
-            
+
         } catch (Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1423,13 +1482,13 @@ class MigrationValidationController extends Controller
         try {
             $startDateInput = $request->input('start_date', now()->format('Y-m-d'));
             $endDateInput = $request->input('end_date', now()->format('Y-m-d'));
-            
+
             $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
             $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
-            
+
             $startDateTime = Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s');
             $endDateTime = Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s');
-            
+
             // Get sample records from MongoDB
             $mongoSamples = DB::connection('mongodb')
                 ->collection('patients')
@@ -1438,11 +1497,11 @@ class MigrationValidationController extends Controller
                 ->limit(5)
                 ->get()
                 ->toArray();
-            
+
             // Get sample records from MSSQL
             $mssqlSamples = DB::connection('sqlsrv')
                 ->select("SELECT TOP 5 modifieddate FROM patients WHERE CONVERT(datetime,modifieddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' BETWEEN '$startDateTime' AND '$endDateTime'");
-            
+
             return response()->json([
                 'success' => true,
                 'debug_info' => [
@@ -1460,7 +1519,7 @@ class MigrationValidationController extends Controller
                     'mssql_count' => $this->getMSSQLCount_Patients($startDate, $endDate)
                 ]
             ]);
-            
+
         } catch (Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1478,13 +1537,13 @@ class MigrationValidationController extends Controller
             $startDateInput = $request->input('start_date', now()->format('Y-m-d'));
             $endDateInput = $request->input('end_date', now()->format('Y-m-d'));
             $limit = $request->input('limit', 50); // Limit results for performance
-            
+
             $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
             $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
-            
+
             $startDateTime = Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s');
             $endDateTime = Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s');
-            
+
             // Get all MongoDB records for the date range
             $mongoRecords = DB::connection('mongodb')
                 ->collection('patients')
@@ -1493,23 +1552,23 @@ class MigrationValidationController extends Controller
                 //->limit($limit)
                 ->get()
                 ->toArray();
-            
+
             // Get all MSSQL records for the date range
             $mssqlRecords = DB::connection('sqlsrv')
                 ->select("SELECT modifieddate FROM patients WHERE CONVERT(datetime,modifieddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' BETWEEN '$startDateTime' AND '$endDateTime'");
-            
+
             // Convert MSSQL dates to comparable format
-            $mssqlDates = array_map(function($record) {
+            $mssqlDates = array_map(function ($record) {
                 return Carbon::parse($record->modifieddate)->format('Y-m-d H:i:s');
             }, $mssqlRecords);
-            
+
             // Find MongoDB records that don't have matching MSSQL records
             $missingRecords = [];
             $foundMatches = 0;
-            
+
             foreach ($mongoRecords as $mongoRecord) {
                 $mongoDate = Carbon::parse($mongoRecord['modifiedat']->toDateTime())->format('Y-m-d H:i:s');
-                
+
                 // Check if this MongoDB record has a corresponding MSSQL record
                 $hasMatch = false;
                 foreach ($mssqlDates as $mssqlDate) {
@@ -1520,7 +1579,7 @@ class MigrationValidationController extends Controller
                         break;
                     }
                 }
-                
+
                 if (!$hasMatch) {
                     $missingRecords[] = [
                         'mongo_id' => $mongoRecord['_id'] ?? 'N/A',
@@ -1535,7 +1594,7 @@ class MigrationValidationController extends Controller
                     ];
                 }
             }
-            
+
             return response()->json([
                 'success' => true,
                 'analysis' => [
@@ -1547,7 +1606,7 @@ class MigrationValidationController extends Controller
                     'missing_records' => $missingRecords
                 ]
             ]);
-            
+
         } catch (Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1565,13 +1624,13 @@ class MigrationValidationController extends Controller
             $startDateInput = $request->input('start_date', now()->format('Y-m-d'));
             $endDateInput = $request->input('end_date', now()->format('Y-m-d'));
             $limit = $request->input('limit', 50);
-            
+
             $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
             $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
-            
+
             $startDateTime = Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s');
             $endDateTime = Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s');
-            
+
             // Get all MongoDB records for the date range
             $mongoRecords = DB::connection('mongodb')
                 ->collection('patients')
@@ -1579,23 +1638,23 @@ class MigrationValidationController extends Controller
                 ->where('modifiedat', '<=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000))
                 ->get()
                 ->toArray();
-            
+
             // Get all MSSQL records for the date range
             $mssqlRecords = DB::connection('sqlsrv')
                 ->select("SELECT TOP $limit modifieddate FROM patients WHERE CONVERT(datetime,modifieddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' BETWEEN '$startDateTime' AND '$endDateTime'");
-            
+
             // Convert MongoDB dates to comparable format
-            $mongoDates = array_map(function($record) {
+            $mongoDates = array_map(function ($record) {
                 return Carbon::parse($record['modifiedat']->toDateTime())->format('Y-m-d H:i:s');
             }, $mongoRecords);
-            
+
             // Find MSSQL records that don't have matching MongoDB records
             $extraRecords = [];
             $foundMatches = 0;
-            
+
             foreach ($mssqlRecords as $mssqlRecord) {
                 $mssqlDate = Carbon::parse($mssqlRecord->modifieddate)->format('Y-m-d H:i:s');
-                
+
                 // Check if this MSSQL record has a corresponding MongoDB record
                 $hasMatch = false;
                 foreach ($mongoDates as $mongoDate) {
@@ -1606,7 +1665,7 @@ class MigrationValidationController extends Controller
                         break;
                     }
                 }
-                
+
                 if (!$hasMatch) {
                     $extraRecords[] = [
                         'mssql_modifieddate' => $mssqlDate,
@@ -1614,7 +1673,7 @@ class MigrationValidationController extends Controller
                     ];
                 }
             }
-            
+
             return response()->json([
                 'success' => true,
                 'analysis' => [
@@ -1626,7 +1685,7 @@ class MigrationValidationController extends Controller
                     'extra_records' => $extraRecords
                 ]
             ]);
-            
+
         } catch (Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1642,7 +1701,7 @@ class MigrationValidationController extends Controller
     {
         try {
             $tables = [];
-            
+
             foreach ($this->migrationTables as $tableName => $config) {
                 $tables[] = [
                     'name' => $tableName,
@@ -1652,7 +1711,7 @@ class MigrationValidationController extends Controller
                     'identifier_field' => $config['identifier_field']
                 ];
             }
-            
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -1660,7 +1719,7 @@ class MigrationValidationController extends Controller
                     'total' => count($tables)
                 ]
             ]);
-            
+
         } catch (Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1704,10 +1763,10 @@ class MigrationValidationController extends Controller
                     ]
                 ]
             ]);
-            
+
         } catch (Exception $e) {
             Log::error('Get validation history error: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'error' => 'Failed to get validation history: ' . $e->getMessage()
@@ -1724,21 +1783,21 @@ class MigrationValidationController extends Controller
             // Handle both GET and POST requests with proper date formatting
             $startDateInput = $request->input('start_date', $request->query('start_date', now()->format('Y-m-d')));
             $endDateInput = $request->input('end_date', $request->query('end_date', now()->format('Y-m-d')));
-            
+
             // Format dates properly for MongoDB
             $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
             $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
-            
+
             // Get all configured tables
             $tables = array_keys($this->migrationTables);
             $results = [];
-            
+
             foreach ($tables as $table) {
                 try {
                     $mongodbCount = $this->getMongoDBCount($startDate, $endDate, $table);
                     $mssqlCount = $this->getMSSQLCount($startDate, $endDate, $table);
                     $difference = $mongodbCount - $mssqlCount;
-                    
+
                     $results[] = [
                         'table' => $table,
                         'mongodb_count' => $mongodbCount,
@@ -1752,7 +1811,7 @@ class MigrationValidationController extends Controller
                         'table' => $table,
                         'error' => $tableException->getMessage()
                     ]);
-                    
+
                     $results[] = [
                         'table' => $table,
                         'mongodb_count' => 0,
@@ -1764,23 +1823,29 @@ class MigrationValidationController extends Controller
                     ];
                 }
             }
-            
+
             return response()->json([
                 'success' => true,
                 'data' => [
                     'validations' => $results,
                     'summary' => [
                         'total_tables' => count($tables),
-                        'complete_tables' => count(array_filter($results, function($r) { return $r['is_complete']; })),
-                        'incomplete_tables' => count(array_filter($results, function($r) { return !$r['is_complete'] && !isset($r['error']); })),
-                        'error_tables' => count(array_filter($results, function($r) { return isset($r['error']); }))
+                        'complete_tables' => count(array_filter($results, function ($r) {
+                            return $r['is_complete'];
+                        })),
+                        'incomplete_tables' => count(array_filter($results, function ($r) {
+                            return !$r['is_complete'] && !isset($r['error']);
+                        })),
+                        'error_tables' => count(array_filter($results, function ($r) {
+                            return isset($r['error']);
+                        }))
                     ]
                 ]
             ]);
-            
+
         } catch (Exception $e) {
             Log::error('Validate all tables error: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'error' => 'Validation failed: ' . $e->getMessage()
