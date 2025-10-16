@@ -194,7 +194,15 @@ class MigrationValidationController extends Controller
             'mongodb_collection' => 'orderitems',
             'mssql_table' => 'orderitemcodes',
             'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
+            'date_field_mssql' => 'insertedtimestamp',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
+        'departments' => [
+            'mongodb_collection' => 'departments',
+            'mssql_table' => 'department',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'insertedtimestamp',
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
@@ -2137,6 +2145,34 @@ class MigrationValidationController extends Controller
                             'path' => '$orderItemDetails',
                             'preserveNullAndEmptyArrays' => true
                         ]
+                    ],
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'departments':
+                return [
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
                     ],
                     [
                         '$match' => [
