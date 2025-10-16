@@ -230,6 +230,22 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'itemmasters' => [
+            'mongodb_collection' => 'itemmasters',
+            'mssql_table' => 'itemmasters',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
+        'patientbilleditempayments_paymentdetails' => [
+            'mongodb_collection' => 'patientbilleditempayments',
+            'mssql_table' => 'patientbilleditempayments_paymentdetails',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -2324,6 +2340,96 @@ class MigrationValidationController extends Controller
                 ];
             case 'payortpaagreement':
                 return [
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'itemmasters':
+                return [
+                    [
+                        '$lookup' => [
+                            'from' => 'orderitems',
+                            'localField' => 'orderitemuid',
+                            'foreignField' => '_id',
+                            'as' => 'orderItemsDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orderItemsDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'itemcategoryuid',
+                            'foreignField' => '_id',
+                            'as' => 'referenceDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$referenceDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'patientbilleditempayments_paymentdetails':
+                return [
+                    [
+                        '$unwind' => [
+                            'path' => '$paymentdetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'paymentdetails.paymentmodeuid',
+                            'foreignField' => '_id',
+                            'as' => 'paymentModeDetails',
+                        ],
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$paymentModeDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ],
+                    ],
                     [
                         '$match' => [
                             'modifiedat' => [
