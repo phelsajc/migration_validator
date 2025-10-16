@@ -78,6 +78,14 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'patientprocedures' => [
+            'mongodb_collection' => 'patientprocedures',
+            'mssql_table' => 'patientprocedures',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -759,7 +767,83 @@ class MigrationValidationController extends Controller
                         [
                             '$count' => 'Total'
                         ]
-                ];              
+                ];    
+            case 'patientprocedures ':
+                return [
+                            [
+                                '$match' => [
+                                    'modifiedat' => [
+                                        '$gte' => $startISODate,
+                                        '$lte' => $endISODate
+                                    ]
+                                ]
+                            ],  
+                            [
+                                '$unwind' => [
+                                    'path' => '$procedures',
+                                    'preserveNullAndEmptyArrays' => true,
+                                ],
+                            ],
+                            [
+                                '$lookup' => [
+                                    'from' => 'departments',
+                                    'localField' => 'departmentuid',
+                                    'foreignField' => '_id',
+                                    'as' => 'departmentsDetails',
+                                ],
+                            ],
+                            [
+                                '$unwind' => [
+                                    'path' => '$departmentsDetails',
+                                    'preserveNullAndEmptyArrays' => true,
+                                ],
+                            ],
+                            [
+                                '$lookup' => [
+                                    'from' => 'users',
+                                    'localField' => 'careprovideruid',
+                                    'foreignField' => '_id',
+                                    'as' => 'careproviderDetails',
+                                ],
+                            ],
+                            [
+                                '$unwind' => [
+                                    'path' => '$careproviderDetails',
+                                    'preserveNullAndEmptyArrays' => true,
+                                ],
+                            ],
+                            [
+                                '$lookup' => [
+                                    'from' => 'procedures',
+                                    'localField' => 'procedures.procedureuid',
+                                    'foreignField' => '_id',
+                                    'as' => 'proceduresDetails',
+                                ],
+                            ],
+                            [
+                                '$unwind' => [
+                                    'path' => '$proceduresDetails',
+                                    'preserveNullAndEmptyArrays' => true,
+                                ],
+                            ],
+                            [
+                                '$lookup' => [
+                                    'from' => 'organisations',
+                                    'localField' => 'orguid',
+                                    'foreignField' => '_id',
+                                    'as' => 'orgDetails',
+                                ],
+                            ],
+                            [
+                                '$unwind' => [
+                                    'path' => '$orgDetails',
+                                    'preserveNullAndEmptyArrays' => true,
+                                ],
+                            ],            
+                            [
+                                '$count' => 'Total'
+                            ]
+                    ];            
             default:
                 // Generic pipeline for simple tables
                 return [
