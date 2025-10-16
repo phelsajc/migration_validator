@@ -126,6 +126,14 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'deposits' => [
+            'mongodb_collection' => 'deposits',
+            'mssql_table' => 'deposits',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -1341,6 +1349,84 @@ class MigrationValidationController extends Controller
                             'path' => '$cardDetails',
                             'preserveNullAndEmptyArrays' => true,
                         ],
+                    ],
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'deposits':
+                return [
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'paymentmodeuid',
+                            'foreignField' => '_id',
+                            'as' => 'paymentDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$paymentDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'carddetails.cardtypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'cardDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$cardDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'payors',
+                            'localField' => 'tpauid',
+                            'foreignField' =>  'associatedpayoragreementsandtpa.tpauid',
+                            'as' => 'tpaDetails'
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'userdepartmentuid',
+                            'foreignField' => '_id',
+                            'as' => 'departmentDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$departmentDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
                     ],
                     [
                         '$match' => [
