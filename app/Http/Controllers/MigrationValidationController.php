@@ -240,7 +240,23 @@ class MigrationValidationController extends Controller
         ],
         'patientbilleditempayments_paymentdetails' => [
             'mongodb_collection' => 'patientbilleditempayments',
-            'mssql_table' => 'patientbilleditempayments_paymentdetails',
+            'mssql_table' => 'patientbilleditempayments',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
+        'itembillinggroup' => [
+            'mongodb_collection' => 'tariffs',
+            'mssql_table' => 'itembillinggroup',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
+        'stockledgers' => [
+            'mongodb_collection' => 'stockledgers',
+            'mssql_table' => 'stockledgers',
             'date_field_mongo' => 'modifiedat',
             'date_field_mssql' => 'modifieddate',
             'identifier_field' => '_id',
@@ -2429,6 +2445,90 @@ class MigrationValidationController extends Controller
                             'path' => '$paymentModeDetails',
                             'preserveNullAndEmptyArrays' => true,
                         ],
+                    ],
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'itembillinggroup':
+                return [
+                    [
+                        '$lookup' => [
+                            'from' => 'orderitems',
+                            'localField' => 'orderitemuid',
+                            'foreignField' => '_id',
+                            'as' => 'orderDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orderDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'billinggroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'billingGrpDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$billingGrpDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'billingsubgroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'billingSubGrpDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$billingSubGrpDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails',
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true,
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'billingSubGrpDetails.chargegroupcodeuid',
+                            'foreignField' => '_id',
+                            'as' => 'itemgroupDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$itemgroupDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
                     ],
                     [
                         '$match' => [
