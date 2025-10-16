@@ -62,6 +62,22 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'dischargeprocesses' => [
+            'mongodb_collection' => 'dischargeprocesses',
+            'mssql_table' => 'dischargeprocesses',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
+        'patientbills' => [
+            'mongodb_collection' => 'patientbills',
+            'mssql_table' => 'patientbills',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -88,6 +104,39 @@ class MigrationValidationController extends Controller
             case 'patients':
                 return [
                     [
+                        '$lookup' => [
+                            'as' => "genderDetails",
+                            'from' => "referencevalues",
+                            'foreignField' => "_id",
+                            'localField' => "genderuid"
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'as' => "maritalDetails",
+                            'from' => "referencevalues",
+                            'foreignField' => "_id",
+                            'localField' => "maritalstatusuid"
+                        ]
+                    ],        
+                    ['$lookup' => [
+                        'from' => 'organisations',
+                        'localField' => 'orguid',
+                        'foreignField' => '_id',
+                        'as' => 'orgDetails'
+                    ]],
+                    ['$unwind' => [
+                        'path' => '$orgDetails',
+                        'preserveNullAndEmptyArrays' => true
+                    ]],
+        
+                    ['$lookup' => [
+                        'from' => 'patientadditionaldetails',
+                        'localField' => '_id',
+                        'foreignField' => 'patientuid',
+                        'as' => 'additionalDetails'
+                    ]],                    
+                    [
                         '$match' => [
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
@@ -99,7 +148,6 @@ class MigrationValidationController extends Controller
                         '$count' => 'Total'
                     ]
                 ];
-
             case 'careproviders':
                 return [
                     [
@@ -604,6 +652,114 @@ class MigrationValidationController extends Controller
                         '$count' => 'Total'
                     ]
                 ];
+            case 'dischargeprocesses ':
+                return [
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'dischargetypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'dschDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$dschDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'medicaldischargetypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'medDschDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$medDschDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],                    
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];   
+            case 'patientbills ':
+                return [
+                        [
+                            '$match' => [
+                                'modifiedat' => [
+                                    '$gte' => $startISODate,
+                                    '$lte' => $endISODate
+                                ]
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'as' => "entypeDetails",
+                                'from' => "referencevalues",
+                                'foreignField' => "_id",
+                                'localField' => "entypeuid"
+                            ]
+                        ],
+                        ['$unwind' => ['path' => '$entypeDetails']],
+                        [
+                            '$lookup' => [
+                                'as' => "patientvisitsDetails",
+                                'from' => "patientvisits",
+                                'foreignField' => "_id",
+                                'localField' => "patientvisituid"
+                            ]
+                        ],
+                        ['$unwind' => ['path' => '$patientvisitsDetails']],
+                        ['$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]],
+                        ['$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]],
+                        ['$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'userdepartmentuid',
+                            'foreignField' => '_id',
+                            'as' => 'UserDeptDetails'
+                        ]],
+                        ['$unwind' => [
+                            'path' => '$UserDeptDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]],                 
+                        [
+                            '$count' => 'Total'
+                        ]
+                ];              
             default:
                 // Generic pipeline for simple tables
                 return [
