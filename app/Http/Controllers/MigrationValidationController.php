@@ -102,6 +102,14 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'patientbilleditempayments' => [
+            'mongodb_collection' => 'patientbilleditempayments',
+            'mssql_table' => 'patientbilleditempayments',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -1105,6 +1113,146 @@ class MigrationValidationController extends Controller
                         '$count' => 'Total'
                     ]
                 ];
+            case 'patientbilleditempayments':
+                    return [
+                        [
+                            '$lookup' => [
+                                'from' => 'billinggroups',
+                                'localField' => 'billinggroupuid',
+                                'foreignField' => '_id',
+                                'as' => 'billinggroupDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$billinggroupDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'billinggroups',
+                                'localField' => 'billingsubgroupuid',
+                                'foreignField' => '_id',
+                                'as' => 'billingsubgroupDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$billingsubgroupDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'referencevalues',
+                                'localField' => 'billingsubgroupDetails.billinggrouptypeuid',
+                                'foreignField' => '_id',
+                                'as' => 'groupDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$groupDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'accountreceivables',
+                                'localField' => 'aruid',
+                                'foreignField' => '_id',
+                                'as' => 'arDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$arDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ], 
+                        [
+                            '$lookup' => [
+                                'from' => 'patientbills',
+                                'localField' => 'patientbilleditemuid',
+                                'foreignField' => 'patientbilleditems._id',
+                                'as' => 'patientBilledItemsDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$patientBilledItemsDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'patientbilldeductions',
+                                'localField' => 'patientbilldeductionuid',
+                                'foreignField' => '_id',
+                                'as' => 'patientBillDeductionDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$patientBillDeductionDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'payors',
+                                'localField' => 'patientBillDeductionDetails.payoruid',
+                                'foreignField' => '_id',
+                                'as' => 'payorDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$payorDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'referencevalues',
+                                'localField' => 'payorDetails.payortypeuid',
+                                'foreignField' => '_id',
+                                'as' => 'refDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$refDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$lookup' => [
+                                'from' => 'organisations',
+                                'localField' => 'orguid',
+                                'foreignField' => '_id',
+                                'as' => 'orgDetails'
+                            ]
+                        ],
+                        [
+                            '$unwind' => [
+                                'path' => '$orgDetails',
+                                'preserveNullAndEmptyArrays' => true
+                            ]
+                        ],
+                        [
+                            '$match' => [
+                                'modifiedat' => [
+                                    '$gte' => $startISODate,
+                                    '$lte' => $endISODate
+                                ]
+                            ]
+                        ],
+                        [
+                            '$count' => 'Total'
+                        ]
+                    ];
             default:
                 // Generic pipeline for simple tables
                 return [
