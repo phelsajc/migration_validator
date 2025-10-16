@@ -142,6 +142,14 @@ class MigrationValidationController extends Controller
             'identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        'goodsreceives' => [
+            'mongodb_collection' => 'goodsreceives',
+            'mssql_table' => 'goodsreceive',
+            'date_field_mongo' => 'modifiedat',
+            'date_field_mssql' => 'modifieddate',
+            'identifier_field' => '_id',
+            'pipeline_type' => 'complex'
+        ],
     ];
     /**
      * Display the migration validation dashboard
@@ -1484,6 +1492,90 @@ class MigrationValidationController extends Controller
                             'preserveNullAndEmptyArrays' => true
                         ]
                     ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$match' => [
+                            'modifiedat' => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'goodsreceives':
+                return [
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'grntypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'grnDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$grnDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'inventorystores',
+                            'localField' => 'storeuid',
+                            'foreignField' => '_id',
+                            'as' => 'storeDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$storeDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'storeDetails.departmentuid',
+                            'foreignField' => '_id',
+                            'as' => 'deptDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$deptDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'statusuid',
+                            'foreignField' => '_id',
+                            'as' => 'statusDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$statusDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],            
                     [
                         '$lookup' => [
                             'from' => 'organisations',
