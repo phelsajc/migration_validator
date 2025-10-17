@@ -3456,7 +3456,7 @@ class MigrationValidationController extends Controller
                 'end_date' => $endDate,
                 'validated_at' => now()->toISOString(),
                 'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
-                'missing_records_analysisxxxxxx' => $missingRecordsAnalysis
+                'missing_records_analysis' => $missingRecordsAnalysis
             ];
 
             return response()->json([
@@ -3981,6 +3981,7 @@ class MigrationValidationController extends Controller
                         'patient_data' => [
                             'mrn' => $mongoRecord['mrn'] ?? 'N/A',
                             'id' => $mongoRecord['patient_id'] ?? $mongoRecord['id'] ?? 'N/A',
+                            '_id' => $mongoRecord['_id'] ?? $mongoRecord['id'] ?? 'N/A',
                             'firstname' => $mongoRecord['firstname'] ?? 'N/A',
                             'lastname' => $mongoRecord['lastname'] ?? 'N/A',
                             'email' => $mongoRecord['email'] ?? 'N/A',
@@ -3990,7 +3991,7 @@ class MigrationValidationController extends Controller
                 }
             }
 
-            return response()->json([
+            /* return response()->json([
                 'success' => true,
                 'analysis' => [
                     'date_range' => $startDateInput . ' to ' . $endDateInput,
@@ -4000,15 +4001,15 @@ class MigrationValidationController extends Controller
                     'missing_from_mssql' => count($missingRecords),
                     'missing_records' => $missingRecords
                 ]
-            ]);
+            ]); */
 
-            /* return [
+            return [
                 'mongo_total' => count($mongoRecords),
                 'mssql_total' => count($mssqlRecords),
                 'found_matches' => $foundMatches,
                 'missing_from_mssql' => count($missingRecords),
                 'missing_records' => $missingRecords
-            ]; */
+            ];
 
         } catch (Exception $e) {
             Log::error('Missing records analysis error', [

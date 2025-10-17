@@ -123,6 +123,28 @@
             </div>
         </div>
 
+        <!-- Missing Records -->
+        <div class="row mb-4" id="missingRecordsSection" style="display: none;">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-exclamation-triangle"></i> Missing Records Analysis</h5>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="toggleMissingRecords()">
+                            <i class="fas fa-eye-slash"></i> Hide Details
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="missingRecordsContent">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                                <p>Loading missing records...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Validation History -->
         <!-- <div class="row">
             <div class="col-12">
@@ -309,6 +331,7 @@
                 const isComplete = result.is_complete || false;
                 const status = result.status || 'UNKNOWN';
                 const validatedAt = result.validated_at || new Date().toISOString();
+                const missingRecordsAnalysis = result.missing_records_analysis || null;
                 
                 resultsDiv.innerHTML = `
                     <div class="validation-result p-3 mb-3">
@@ -340,8 +363,22 @@
                                 <strong>Validated At:</strong> ${new Date(validatedAt).toLocaleString()}
                             </div>
                         </div>
+                        ${missingRecordsAnalysis && missingRecordsAnalysis.missing_records && missingRecordsAnalysis.missing_records.length > 0 ? `
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <button class="btn btn-warning btn-sm" onclick="showMissingRecords('${table}')">
+                                        <i class="fas fa-exclamation-triangle"></i> View ${missingRecordsAnalysis.missing_records.length} Missing Records
+                                    </button>
+                                </div>
+                            </div>
+                        ` : ''}
                     </div>
                 `;
+                
+                // Store missing records data for later display
+                if (missingRecordsAnalysis) {
+                    window.currentMissingRecords = missingRecordsAnalysis;
+                }
             } else {
                 console.error('Invalid response data:', data);
                 displayError(data?.error || 'Validation failed - Invalid response format');
@@ -450,6 +487,102 @@
                     <i class="fas fa-exclamation-triangle"></i> ${message}
                 </div>
             `;
+        }
+
+        function showMissingRecords(tableName) {
+            const missingRecordsSection = document.getElementById('missingRecordsSection');
+            const missingRecordsContent = document.getElementById('missingRecordsContent');
+            
+            if (window.currentMissingRecords && window.currentMissingRecords.missing_records) {
+                const missingRecords = window.currentMissingRecords.missing_records;
+                const analysis = window.currentMissingRecords;
+                
+                let html = `
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <strong>MongoDB Total:</strong> ${analysis.mongo_total || 0}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>MSSQL Total:</strong> ${analysis.mssql_total || 0}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Found Matches:</strong> ${analysis.found_matches || 0}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Missing Records:</strong> 
+                            <span class="text-danger">${missingRecords.length}</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6>Missing Records Details:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>MongoDB ID</th>
+                                    <th>Created Date</th>
+                                    <th>Modified Date</th>
+                                    <th>MRN</th>
+                                    <th>Patient ID</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th>Time Difference</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                missingRecords.forEach(record => {
+                    const patientData = record.patient_data || {};
+                    html += `
+                        <tr>
+                            <td><code>${record.mongo_id.$oid || 'N/A'}</code></td>
+                            <td>${record.mongo_createdat || 'N/A'}</td>
+                            <td>${record.modifiedat || 'N/A'}</td>
+                            <td><strong>${patientData.mrn || 'N/A'}</strong></td>
+                            <td>${patientData.id || 'N/A'}</td>
+                            <td>${patientData.firstname || 'N/A'} ${patientData.lastname || ''}</td>
+                            <td>${patientData.email || 'N/A'}</td>
+                            <td>${patientData.phone || 'N/A'}</td>
+                            <td>
+                                <span class="badge ${record.time_difference_seconds <= 5 ? 'bg-warning' : 'bg-danger'}">
+                                    ${record.time_difference_seconds || 'N/A'}s
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+                missingRecordsContent.innerHTML = html;
+                missingRecordsSection.style.display = 'block';
+            } else {
+                missingRecordsContent.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No missing records data available.
+                    </div>
+                `;
+                missingRecordsSection.style.display = 'block';
+            }
+        }
+
+        function toggleMissingRecords() {
+            const missingRecordsSection = document.getElementById('missingRecordsSection');
+            const toggleBtn = document.querySelector('#missingRecordsSection .btn');
+            
+            if (missingRecordsSection.style.display === 'none') {
+                missingRecordsSection.style.display = 'block';
+                toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i> Hide Details';
+            } else {
+                missingRecordsSection.style.display = 'none';
+                toggleBtn.innerHTML = '<i class="fas fa-eye"></i> Show Details';
+            }
         }
 
         // Initialize page
