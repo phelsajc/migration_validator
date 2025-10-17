@@ -3443,6 +3443,9 @@ class MigrationValidationController extends Controller
             $difference = $mongodbCount - $mssqlCount;
             $isComplete = $difference === 0;
 
+            // Get missing records analysis
+            $missingRecordsAnalysis = $this->getMissingRecordsAnalysis($tableName, $startDate, $endDate, 50);
+
             $result = [
                 'table' => $tableName,
                 'mongodb_count' => $mongodbCount,
@@ -3452,7 +3455,8 @@ class MigrationValidationController extends Controller
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'validated_at' => now()->toISOString(),
-                'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE'
+                'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
+                'missing_records_analysis' => $missingRecordsAnalysis
             ];
 
             return response()->json([
@@ -3515,6 +3519,9 @@ class MigrationValidationController extends Controller
             $difference = $mongodbCount - $mssqlCount;
             $isComplete = $difference === 0;
 
+            // Get missing records analysis
+            $missingRecordsAnalysis = $this->getMissingRecordsAnalysis('patients', $startDate, $endDate, 50);
+
             $result = [
                 'table' => 'patients',
                 'mongodb_count' => $mongodbCount,
@@ -3524,7 +3531,8 @@ class MigrationValidationController extends Controller
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'validated_at' => now()->toISOString(),
-                'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE'
+                'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
+                'missing_records_analysis' => $missingRecordsAnalysis
             ];
 
             return response()->json([
@@ -3798,6 +3806,113 @@ class MigrationValidationController extends Controller
     }
 
     /**
+     * Helper method to get missing records analysis for any table
+     */
+    private function getMissingRecordsAnalysis($tableName, $startDate, $endDate, $limit = 50)
+    {
+        try {
+            $startDateInput = Carbon::parse($startDate)->format('Y-m-d');
+            $endDateInput = Carbon::parse($endDate)->format('Y-m-d');
+            
+            $startDateTime = Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s');
+            $endDateTime = Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s');
+
+            // Get pipeline for the table and modify it to return records instead of count
+            $pipeline = $this->getPipelineForTable($tableName, $startDate, $endDate);
+            
+            // Remove the $count stage and add $limit instead
+            $recordsPipeline = array_filter($pipeline, function($stage) {
+                return !isset($stage['$count']);
+            });
+            
+            // Add limit to the pipeline
+            $recordsPipeline[] = ['$limit' => $limit];
+            
+            // Get MongoDB records using the pipeline
+            $config = $this->migrationTables[$tableName];
+            $mongoRecords = DB::connection('mongodb')
+                ->collection($config['mongodb_collection'])
+                ->raw(function ($collection) use ($recordsPipeline) {
+                    return $collection->aggregate($recordsPipeline, [
+                        'allowDiskUse' => true,
+                        'maxTimeMS' => 300000, // 5 minutes
+                        'batchSize' => 1000
+                    ]);
+                })->toArray();
+
+            // Get all MSSQL records for the date range
+            $mssqlRecords = DB::connection('sqlsrv')
+                ->select("SELECT modifieddate FROM {$tableName} WHERE CONVERT(datetime,modifieddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' BETWEEN '$startDateTime' AND '$endDateTime'");
+
+            // Convert MSSQL dates to comparable format
+            $mssqlDates = array_map(function ($record) {
+                return Carbon::parse($record->modifieddate)->format('Y-m-d H:i:s');
+            }, $mssqlRecords);
+
+            // Find MongoDB records that don't have matching MSSQL records
+            $missingRecords = [];
+            $foundMatches = 0;
+
+            foreach ($mongoRecords as $mongoRecord) {
+                // Handle different date field structures based on the pipeline results
+                $modifiedAt = null;
+                if (isset($mongoRecord['modifiedat'])) {
+                    if (is_object($mongoRecord['modifiedat']) && method_exists($mongoRecord['modifiedat'], 'toDateTime')) {
+                        $modifiedAt = $mongoRecord['modifiedat']->toDateTime();
+                    } elseif (is_string($mongoRecord['modifiedat'])) {
+                        $modifiedAt = Carbon::parse($mongoRecord['modifiedat']);
+                    }
+                }
+                
+                if (!$modifiedAt) {
+                    continue; // Skip records without valid date
+                }
+                
+                $mongoDate = $modifiedAt->format('Y-m-d H:i:s');
+
+                // Check if this MongoDB record has a corresponding MSSQL record
+                $hasMatch = false;
+                foreach ($mssqlDates as $mssqlDate) {
+                    // Allow for small time differences (within 1 second)
+                    if (abs(Carbon::parse($mongoDate)->diffInSeconds(Carbon::parse($mssqlDate))) <= 1) {
+                        $hasMatch = true;
+                        $foundMatches++;
+                        break;
+                    }
+                }
+
+                if (!$hasMatch) {
+                    $missingRecords[] = [
+                        'mongo_id' => $mongoRecord['_id'] ?? 'N/A',
+                        'mongo_modifiedat' => $mongoDate,
+                        'mongo_modifiedat_original' => is_object($modifiedAt) ? $modifiedAt->format('Y-m-d H:i:s.u') : $mongoDate,
+                        'record_data' => [
+                            'mrn' => $mongoRecord['mrn'] ?? 'N/A',
+                            'id' => $mongoRecord['patient_id'] ?? $mongoRecord['id'] ?? 'N/A',
+                            'name' => $mongoRecord['firstname'] ?? $mongoRecord['name'] ?? 'N/A'
+                        ]
+                    ];
+                }
+            }
+
+            return [
+                'mongo_total' => count($mongoRecords),
+                'mssql_total' => count($mssqlRecords),
+                'found_matches' => $foundMatches,
+                'missing_from_mssql' => count($missingRecords),
+                'missing_records' => $missingRecords
+            ];
+
+        } catch (Exception $e) {
+            Log::error('Missing records analysis error', [
+                'table' => $tableName,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    /**
      * Find records that exist in MongoDB but not in MSSQL
      */
     public function findMissingRecords(Request $request)
@@ -4067,13 +4182,17 @@ class MigrationValidationController extends Controller
                     $mssqlCount = $this->getMSSQLCount($startDate, $endDate, $table);
                     $difference = $mongodbCount - $mssqlCount;
 
+                    // Get missing records analysis
+                    $missingRecordsAnalysis = $this->getMissingRecordsAnalysis($table, $startDate, $endDate, 50);
+
                     $results[] = [
                         'table' => $table,
                         'mongodb_count' => $mongodbCount,
                         'mssql_count' => $mssqlCount,
                         'difference' => $difference,
                         'is_complete' => $difference === 0,
-                        'status' => $difference === 0 ? 'COMPLETE' : 'INCOMPLETE'
+                        'status' => $difference === 0 ? 'COMPLETE' : 'INCOMPLETE',
+                        'missing_records_analysis' => $missingRecordsAnalysis
                     ];
                 } catch (Exception $tableException) {
                     Log::error('Table validation failed', [
