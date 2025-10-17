@@ -17,10 +17,10 @@ class MigrationValidationController extends Controller
         'patients' => [
             'mongodb_collection' => 'patients',
             'mssql_table' => 'patients',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
             'identifier_field' => 'mrn',
-            'pipeline_type' => 'simple'
+            'pipeline_type' => 'complex'
         ],
         'careproviders' => [
             'mongodb_collection' => 'users',
@@ -3456,7 +3456,7 @@ class MigrationValidationController extends Controller
                 'end_date' => $endDate,
                 'validated_at' => now()->toISOString(),
                 'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
-                'missing_records_analysis' => $missingRecordsAnalysis
+                'missing_records_analysisxxxxxx' => $missingRecordsAnalysis
             ];
 
             return response()->json([
@@ -3520,7 +3520,7 @@ class MigrationValidationController extends Controller
             $isComplete = $difference === 0;
 
             // Get missing records analysis
-            $missingRecordsAnalysis = $this->getMissingRecordsAnalysis('patients', $startDate, $endDate, 50);
+            //$missingRecordsAnalysis = $this->getMissingRecordsAnalysis('patients', $startDate, $endDate, 50);
 
             $result = [
                 'table' => 'patients',
@@ -3532,7 +3532,7 @@ class MigrationValidationController extends Controller
                 'end_date' => $endDate,
                 'validated_at' => now()->toISOString(),
                 'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
-                'missing_records_analysis' => $missingRecordsAnalysis
+                //'missing_records_analysis' => $missingRecordsAnalysis
             ];
 
             return response()->json([
@@ -3628,8 +3628,12 @@ class MigrationValidationController extends Controller
             $endDateTime = Carbon::parse($endDate)->utc()->format('Y-m-d H:i:s');
 
             // Execute the SQL query - match the migration filter exactly
-            $result = DB::connection('sqlsrv')
+            /* $result = DB::connection('sqlsrv')
                 ->select("SELECT COUNT(*) as total FROM {$config['mssql_table']} WHERE {$config['date_field_mssql']} >= '$startDateTime' AND {$config['date_field_mssql']} <= '$endDateTime'");
+             */
+            
+             $result = DB::connection('sqlsrv')
+                ->select("SELECT COUNT(*) as total FROM {$config['mssql_table']} WHERE (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEn '$startDateTime' AND '$endDateTime'");
 
             return $result[0]->total ?? 0;
 
@@ -3645,7 +3649,7 @@ class MigrationValidationController extends Controller
     /**
      * Get count from MSSQL (legacy method for patients)
      */
-    private function getMSSQLCount_Patients($startDate, $endDate)
+    private function getMSSQLCount_Paatients($startDate, $endDate)
     {
         try {
             // Convert to UTC timezone to match migration filter
@@ -3654,7 +3658,7 @@ class MigrationValidationController extends Controller
 
             // Execute the SQL query - match the migration filter exactly
             $result = DB::connection('sqlsrv')
-                ->select("SELECT COUNT(*) as total FROM patients WHERE modifieddate >= '$startDateTime' AND modifieddate <= '$endDateTime'");
+            ->select("SELECT COUNT(*) as total FROM patients WHERE modifieddate >= '$startDateTime' AND modifieddate <= '$endDateTime'");
 
             return $result[0]->total ?? 0;
 
@@ -3818,7 +3822,7 @@ class MigrationValidationController extends Controller
             $endDateTime = Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s');
 
             // Get pipeline for the table and modify it to return records instead of count
-            $pipeline = $this->getPipelineForTable($tableName, $startDate, $endDate);
+            /* $pipeline = $this->getPipelineForTable($tableName, $startDate, $endDate);
             
             // Remove the $count stage and add $limit instead
             $recordsPipeline = array_filter($pipeline, function($stage) {
@@ -3852,7 +3856,7 @@ class MigrationValidationController extends Controller
             // Find MongoDB records that don't have matching MSSQL records
             $missingRecords = [];
             $foundMatches = 0;
-
+     
             foreach ($mongoRecords as $mongoRecord) {
                 // Handle different date field structures based on the pipeline results
                 $modifiedAt = null;
@@ -3872,9 +3876,20 @@ class MigrationValidationController extends Controller
 
                 // Check if this MongoDB record has a corresponding MSSQL record
                 $hasMatch = false;
+                $closestMatch = null;
+                $minDifference = PHP_INT_MAX;
+                
                 foreach ($mssqlDates as $mssqlDate) {
-                    // Allow for small time differences (within 1 second)
-                    if (abs(Carbon::parse($mongoDate)->diffInSeconds(Carbon::parse($mssqlDate))) <= 1) {
+                    $difference = abs(Carbon::parse($mongoDate)->diffInSeconds(Carbon::parse($mssqlDate)));
+                    
+                    // Track closest match for debugging
+                    if ($difference < $minDifference) {
+                        $minDifference = $difference;
+                        $closestMatch = $mssqlDate;
+                    }
+                    
+                    // Allow for small time differences (within 5 seconds for better matching)
+                    if ($difference <= 5) {
                         $hasMatch = true;
                         $foundMatches++;
                         break;
@@ -3886,22 +3901,114 @@ class MigrationValidationController extends Controller
                         'mongo_id' => $mongoRecord['_id'] ?? 'N/A',
                         'mongo_modifiedat' => $mongoDate,
                         'mongo_modifiedat_original' => is_object($modifiedAt) ? $modifiedAt->format('Y-m-d H:i:s.u') : $mongoDate,
+                        'closest_mssql_match' => $closestMatch,
+                        'time_difference_seconds' => $minDifference,
                         'record_data' => [
                             'mrn' => $mongoRecord['mrn'] ?? 'N/A',
                             'id' => $mongoRecord['patient_id'] ?? $mongoRecord['id'] ?? 'N/A',
-                            'name' => $mongoRecord['firstname'] ?? $mongoRecord['name'] ?? 'N/A'
+                            'name' => $mongoRecord['firstname'] ?? $mongoRecord['name'] ?? 'N/A',
+                            'email' => $mongoRecord['email'] ?? 'N/A',
+                            'phone' => $mongoRecord['phone'] ?? 'N/A'
+                        ]
+                    ];
+                }
+            } */
+
+            $mongoRecords = DB::connection('mongodb')
+                ->collection('patients')
+                ->where('createdat', '>=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000))
+                ->where('createdat', '<=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000))
+                //->limit($limit)
+                ->get()
+                ->toArray();
+
+            // Get all MSSQL records for the date range
+            /* $mssqlRecords = DB::connection('sqlsrv')
+                ->select("SELECT createddate FROM patients WHERE CAST(CONVERT(datetime,createddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' AS date) BETWEEN '$startDateTime' AND '$endDateTime'");
+              */  
+            $mssqlRecords = DB::connection('sqlsrv')
+                ->select("SELECT createddate FROM patients WHERE (TRY_CONVERT(datetimeoffset, createddate, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEN '$startDateTime' AND '$endDateTime'");
+
+            // Convert MSSQL dates to comparable format
+            $mssqlDates = array_map(function ($record) {
+                return Carbon::parse($record->createddate)->format('Y-m-d H:i:s');
+            }, $mssqlRecords);
+
+            // Find MongoDB records that don't have matching MSSQL records
+            $missingRecords = [];
+            $foundMatches = 0;
+            $usedMssqlDates = []; // Track which MSSQL dates have been matched
+
+            foreach ($mongoRecords as $mongoRecord) {
+                $mongoDate = Carbon::parse($mongoRecord['createdat']->toDateTime())->format('Y-m-d H:i:s');
+
+                // Check if this MongoDB record has a corresponding MSSQL record
+                $hasMatch = false;
+                $bestMatch = null;
+                $minDifference = PHP_INT_MAX;
+                
+                foreach ($mssqlDates as $index => $mssqlDate) {
+                    // Skip if this MSSQL date has already been matched
+                    if (in_array($index, $usedMssqlDates)) {
+                        continue;
+                    }
+                    
+                    $difference = abs(Carbon::parse($mongoDate)->diffInSeconds(Carbon::parse($mssqlDate)));
+                    
+                    // Track the best match for debugging
+                    if ($difference < $minDifference) {
+                        $minDifference = $difference;
+                        $bestMatch = $index;
+                    }
+                    
+                    // Allow for small time differences (within 5 seconds for better matching)
+                    if ($difference <= 5) {
+                        $hasMatch = true;
+                        $usedMssqlDates[] = $index; // Mark this MSSQL date as used
+                        $foundMatches++;
+                        break;
+                    }
+                }
+
+                if (!$hasMatch) {
+                    $missingRecords[] = [
+                        'mongo_id' => $mongoRecord['_id'] ?? 'N/A',
+                        'mongo_createdat' => $mongoDate,
+                        'modifiedat' => $mongoRecord['modifiedat']->toDateTime()->format('Y-m-d H:i:s'),
+                        'mongo_createdat_original' => $mongoRecord['createdat']->toDateTime()->format('Y-m-d H:i:s.u'),
+                        'closest_mssql_match' => $bestMatch !== null ? $mssqlDates[$bestMatch] : 'N/A',
+                        'time_difference_seconds' => $minDifference,
+                        'patient_data' => [
+                            'mrn' => $mongoRecord['mrn'] ?? 'N/A',
+                            'id' => $mongoRecord['patient_id'] ?? $mongoRecord['id'] ?? 'N/A',
+                            'firstname' => $mongoRecord['firstname'] ?? 'N/A',
+                            'lastname' => $mongoRecord['lastname'] ?? 'N/A',
+                            'email' => $mongoRecord['email'] ?? 'N/A',
+                            'phone' => $mongoRecord['phone'] ?? 'N/A'
                         ]
                     ];
                 }
             }
 
-            return [
+            return response()->json([
+                'success' => true,
+                'analysis' => [
+                    'date_range' => $startDateInput . ' to ' . $endDateInput,
+                    'mongo_total' => count($mongoRecords),
+                    'mssql_total' => count($mssqlRecords),
+                    'found_matches' => $foundMatches,
+                    'missing_from_mssql' => count($missingRecords),
+                    'missing_records' => $missingRecords
+                ]
+            ]);
+
+            /* return [
                 'mongo_total' => count($mongoRecords),
                 'mssql_total' => count($mssqlRecords),
                 'found_matches' => $foundMatches,
                 'missing_from_mssql' => count($missingRecords),
                 'missing_records' => $missingRecords
-            ];
+            ]; */
 
         } catch (Exception $e) {
             Log::error('Missing records analysis error', [
@@ -3931,19 +4038,19 @@ class MigrationValidationController extends Controller
             // Get all MongoDB records for the date range
             $mongoRecords = DB::connection('mongodb')
                 ->collection('patients')
-                ->where('modifiedat', '>=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000))
-                ->where('modifiedat', '<=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000))
+                ->where('createdat', '>=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000))
+                ->where('createdat', '<=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000))
                 //->limit($limit)
                 ->get()
                 ->toArray();
 
             // Get all MSSQL records for the date range
             $mssqlRecords = DB::connection('sqlsrv')
-                ->select("SELECT modifieddate FROM patients WHERE CONVERT(datetime,modifieddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' BETWEEN '$startDateTime' AND '$endDateTime'");
+                ->select("SELECT createddate FROM patients WHERE CONVERT(datetime,createddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' BETWEEN '$startDateTime' AND '$endDateTime'");
 
             // Convert MSSQL dates to comparable format
             $mssqlDates = array_map(function ($record) {
-                return Carbon::parse($record->modifieddate)->format('Y-m-d H:i:s');
+                return Carbon::parse($record->createddate)->format('Y-m-d H:i:s');
             }, $mssqlRecords);
 
             // Find MongoDB records that don't have matching MSSQL records
@@ -3951,7 +4058,7 @@ class MigrationValidationController extends Controller
             $foundMatches = 0;
 
             foreach ($mongoRecords as $mongoRecord) {
-                $mongoDate = Carbon::parse($mongoRecord['modifiedat']->toDateTime())->format('Y-m-d H:i:s');
+                $mongoDate = Carbon::parse($mongoRecord['createdat']->toDateTime())->format('Y-m-d H:i:s');
 
                 // Check if this MongoDB record has a corresponding MSSQL record
                 $hasMatch = false;
@@ -3967,8 +4074,8 @@ class MigrationValidationController extends Controller
                 if (!$hasMatch) {
                     $missingRecords[] = [
                         'mongo_id' => $mongoRecord['_id'] ?? 'N/A',
-                        'mongo_modifiedat' => $mongoDate,
-                        'mongo_modifiedat_original' => $mongoRecord['modifiedat']->toDateTime()->format('Y-m-d H:i:s.u'),
+                        'mongo_createdat' => $mongoDate,
+                        'mongo_createdat_original' => $mongoRecord['createdat']->toDateTime()->format('Y-m-d H:i:s.u'),
                         'patient_data' => [
                             'mrn' => $mongoRecord['mrn'] ?? 'N/A',
                             /* 'email' => $mongoRecord['email'] ?? 'N/A',
@@ -4183,7 +4290,7 @@ class MigrationValidationController extends Controller
                     $difference = $mongodbCount - $mssqlCount;
 
                     // Get missing records analysis
-                    $missingRecordsAnalysis = $this->getMissingRecordsAnalysis($table, $startDate, $endDate, 50);
+                    //$missingRecordsAnalysis = $this->getMissingRecordsAnalysis($table, $startDate, $endDate, 50);
 
                     $results[] = [
                         'table' => $table,
@@ -4192,7 +4299,7 @@ class MigrationValidationController extends Controller
                         'difference' => $difference,
                         'is_complete' => $difference === 0,
                         'status' => $difference === 0 ? 'COMPLETE' : 'INCOMPLETE',
-                        'missing_records_analysis' => $missingRecordsAnalysis
+                        //'missing_records_analysis' => $missingRecordsAnalysis
                     ];
                 } catch (Exception $tableException) {
                     Log::error('Table validation failed', [
