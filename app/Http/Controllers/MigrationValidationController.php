@@ -3645,17 +3645,17 @@ class MigrationValidationController extends Controller
                 ");
 
                 $result = DB::connection('sqlsrv')
-    ->select("
-        SELECT COUNT(*) AS total
-        FROM (
-            SELECT DISTINCT mrn
-            FROM {$config['mssql_table']}
-            WHERE 
-                (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
-                 AT TIME ZONE 'Singapore Standard Time')
-                BETWEEN '$startDateTime' AND '$endDateTime'
-        ) AS sub
-    ");
+                ->select("
+                    SELECT COUNT(*) AS total
+                    FROM (
+                        SELECT DISTINCT mrn
+                        FROM {$config['mssql_table']}
+                        WHERE 
+                            (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
+                            AT TIME ZONE 'Singapore Standard Time')
+                            BETWEEN '$startDateTime' AND '$endDateTime'
+                    ) AS sub
+                ");
 
             
             return $result[0]->total ?? 0;
@@ -3952,6 +3952,7 @@ class MigrationValidationController extends Controller
             $mssqlRecords = DB::connection('sqlsrv')
                 ->select("SELECT createddate FROM patients WHERE (TRY_CONVERT(datetimeoffset, createddate, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEN '$startDateTime' AND '$endDateTime'");
 
+                
             // Convert MSSQL dates to comparable format
             $mssqlDates = array_map(function ($record) {
                 return Carbon::parse($record->createddate)->format('Y-m-d H:i:s');
@@ -4012,64 +4013,21 @@ class MigrationValidationController extends Controller
                 }
             }
 
-            /* return response()->json([
-                'success' => true,
-                'analysis' => [
-                    'date_range' => $startDateInput . ' to ' . $endDateInput,
-                    'mongo_total' => count($mongoRecords),
-                    'mssql_total' => count($mssqlRecords),
-                    'found_matches' => $foundMatches,
-                    'missing_from_mssql' => count($missingRecords),
-                    'missing_records' => $missingRecords
-                ]
-            ]); */
-
-            return [
-                'mongo_total' => count($mongoRecords),
-                'mssql_total' => count($mssqlRecords),
-                'found_matches' => $foundMatches,
-                'missing_from_mssql' => count($missingRecords),
-                'missing_records' => $missingRecords,
-                "sql" => "SELECT createddate FROM patients WHERE (TRY_CONVERT(datetimeoffset, createddate, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEN '$startDateTime' AND '$endDateTime'"
-            ];
-
-        } catch (Exception $e) {
-            Log::error('Missing records analysis error', [
-                'table' => $tableName,
-                'error' => $e->getMessage()
-            ]);
-            return null;
-        }
-    }
-
-    /**
-     * Find records that exist in MongoDB but not in MSSQL
-     */
-    public function findMissingRecords(Request $request)
-    {
-        try {
-            $startDateInput = $request->input('start_date', now()->format('Y-m-d'));
-            $endDateInput = $request->input('end_date', now()->format('Y-m-d'));
-            $limit = $request->input('limit', 50); // Limit results for performance
-
-            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
-            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
-
-            $startDateTime = Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s');
-            $endDateTime = Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s');
-
-            // Get all MongoDB records for the date range
-            $mongoRecords = DB::connection('mongodb')
-                ->collection('patients')
-                ->where('createdat', '>=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000))
-                ->where('createdat', '<=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000))
-                //->limit($limit)
-                ->get()
-                ->toArray();
 
             // Get all MSSQL records for the date range
-            $mssqlRecords = DB::connection('sqlsrv')
+            $mssqlRecords1 = DB::connection('sqlsrv')
                 ->select("SELECT createddate FROM patients WHERE CONVERT(datetime,createddate) AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time' BETWEEN '$startDateTime' AND '$endDateTime'");
+
+                $mssqlRecords = DB::connection('sqlsrv')
+    ->select("
+        SELECT DISTINCT mrn, createddate
+        FROM patients
+        WHERE 
+            (TRY_CONVERT(datetimeoffset, createddate, 127) 
+             AT TIME ZONE 'Singapore Standard Time')
+            BETWEEN '$startDateTime' AND '$endDateTime'
+    ");
+
 
             // Convert MSSQL dates to comparable format
             $mssqlDates = array_map(function ($record) {
