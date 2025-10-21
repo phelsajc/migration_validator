@@ -3632,9 +3632,32 @@ class MigrationValidationController extends Controller
                 ->select("SELECT COUNT(*) as total FROM {$config['mssql_table']} WHERE {$config['date_field_mssql']} >= '$startDateTime' AND {$config['date_field_mssql']} <= '$endDateTime'");
              */
             
-             $result = DB::connection('sqlsrv')
+             $result1 = DB::connection('sqlsrv')
                 ->select("SELECT COUNT(*) as total FROM {$config['mssql_table']} WHERE (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEn '$startDateTime' AND '$endDateTime'");
+            $result2 = DB::connection('sqlsrv')
+                ->select("
+                    SELECT COUNT(DISTINCT mrn) AS total
+                    FROM {$config['mssql_table']}
+                    WHERE 
+                        (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
+                         AT TIME ZONE 'Singapore Standard Time')
+                        BETWEEN '$startDateTime' AND '$endDateTime'
+                ");
 
+                $result = DB::connection('sqlsrv')
+    ->select("
+        SELECT COUNT(*) AS total
+        FROM (
+            SELECT DISTINCT mrn
+            FROM {$config['mssql_table']}
+            WHERE 
+                (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
+                 AT TIME ZONE 'Singapore Standard Time')
+                BETWEEN '$startDateTime' AND '$endDateTime'
+        ) AS sub
+    ");
+
+            
             return $result[0]->total ?? 0;
 
         } catch (Exception $e) {
@@ -3937,47 +3960,45 @@ class MigrationValidationController extends Controller
             // Find MongoDB records that don't have matching MSSQL records
             $missingRecords = [];
             $foundMatches = 0;
-            $usedMssqlDates = []; // Track which MSSQL dates have been matched
-
+            
             foreach ($mongoRecords as $mongoRecord) {
+                $mongoId = $mongoRecord['_id'] ?? null;
                 $mongoDate = Carbon::parse($mongoRecord['createdat']->toDateTime())->format('Y-m-d H:i:s');
-
-                // Check if this MongoDB record has a corresponding MSSQL record
-                $hasMatch = false;
-                $bestMatch = null;
-                $minDifference = PHP_INT_MAX;
                 
-                foreach ($mssqlDates as $index => $mssqlDate) {
-                    // Skip if this MSSQL date has already been matched
-                    if (in_array($index, $usedMssqlDates)) {
-                        continue;
-                    }
-                    
-                    $difference = abs(Carbon::parse($mongoDate)->diffInSeconds(Carbon::parse($mssqlDate)));
-                    
-                    // Track the best match for debugging
-                    if ($difference < $minDifference) {
-                        $minDifference = $difference;
-                        $bestMatch = $index;
-                    }
-                    
-                    // Allow for small time differences (within 5 seconds for better matching)
-                    if ($difference <= 5) {
-                        $hasMatch = true;
-                        $usedMssqlDates[] = $index; // Mark this MSSQL date as used
-                        $foundMatches++;
-                        break;
+                // Check if this MongoDB record exists in MSSQL by ID
+                $hasMatch = false;
+                $mssqlRecord = null;
+                
+                if ($mongoId) {
+                    try {
+                        // Convert MongoDB ObjectId to string if needed
+                        $mongoIdString = (string) $mongoRecord['_id'];//is_object($mongoId) ? (string)$mongoId : $mongoId;
+                        
+                        // Check if record exists in MSSQL by patient_id or _id
+                        $mssqlRecord = DB::connection('sqlsrv')
+                            ->select("SELECT * FROM patients WHERE patient_id = ?", [$mongoIdString]);
+                        
+                        if (!empty($mssqlRecord)) {
+                            $hasMatch = true;
+                            $foundMatches++;
+                        }
+                    } catch (Exception $e) {
+                        Log::warning('Error checking MSSQL record existence', [
+                            'mongo_id' => $mongoIdString ?? 'N/A',
+                            'error' => $e->getMessage()
+                        ]);
                     }
                 }
 
+                //$oid = (string) $mongoRecord->_id; // or $doc['_id']
                 if (!$hasMatch) {
                     $missingRecords[] = [
                         'mongo_id' => $mongoRecord['_id'] ?? 'N/A',
+                        'mongo_id2' => (string) $mongoRecord['_id'],
                         'mongo_createdat' => $mongoDate,
                         'modifiedat' => $mongoRecord['modifiedat']->toDateTime()->format('Y-m-d H:i:s'),
                         'mongo_createdat_original' => $mongoRecord['createdat']->toDateTime()->format('Y-m-d H:i:s.u'),
-                        'closest_mssql_match' => $bestMatch !== null ? $mssqlDates[$bestMatch] : 'N/A',
-                        'time_difference_seconds' => $minDifference,
+                        'mssql_check_result' => $mssqlRecord ? 'Found but no match' : 'Not found in MSSQL',
                         'patient_data' => [
                             'mrn' => $mongoRecord['mrn'] ?? 'N/A',
                             'id' => $mongoRecord['patient_id'] ?? $mongoRecord['id'] ?? 'N/A',
@@ -4008,7 +4029,8 @@ class MigrationValidationController extends Controller
                 'mssql_total' => count($mssqlRecords),
                 'found_matches' => $foundMatches,
                 'missing_from_mssql' => count($missingRecords),
-                'missing_records' => $missingRecords
+                'missing_records' => $missingRecords,
+                "sql" => "SELECT createddate FROM patients WHERE (TRY_CONVERT(datetimeoffset, createddate, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEN '$startDateTime' AND '$endDateTime'"
             ];
 
         } catch (Exception $e) {

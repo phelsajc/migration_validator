@@ -80,9 +80,9 @@
                                     <button type="button" class="btn btn-primary me-2" onclick="validateSelectedTable()" id="validateBtn" disabled>
                                         <i class="fas fa-search"></i> Validate
                                     </button>
-                                    <button type="button" class="btn btn-success" onclick="validateAllTables()">
+                                    <!-- <button type="button" class="btn btn-success" onclick="validateAllTables()">
                                         <i class="fas fa-check-double"></i> Validate All
-                                    </button>
+                                    </button> -->
                                 </div>
                             </div>
                             <div class="row mt-2" id="tableInfo" style="display: none;">
@@ -523,35 +523,24 @@
                                     <th>Created Date</th>
                                     <th>Modified Date</th>
                                     <th>MRN</th>
-                                    <th>Patient ID</th>
                                     <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Phone</th>
-                                    <th>Time Difference</th>
                                 </tr>
                             </thead>
                             <tbody>
                 `;
-                
+                let a = 1;
                 missingRecords.forEach(record => {
                     const patientData = record.patient_data || {};
                     html += `
                         <tr>
-                            <td><code>${record.mongo_id.$oid || 'N/A'}</code></td>
+                            <td><code>${a} ${record.mongo_id.$oid || 'N/A'}</code></td>
                             <td>${record.mongo_createdat || 'N/A'}</td>
                             <td>${record.modifiedat || 'N/A'}</td>
                             <td><strong>${patientData.mrn || 'N/A'}</strong></td>
-                            <td>${patientData.id || 'N/A'}</td>
                             <td>${patientData.firstname || 'N/A'} ${patientData.lastname || ''}</td>
-                            <td>${patientData.email || 'N/A'}</td>
-                            <td>${patientData.phone || 'N/A'}</td>
-                            <td>
-                                <span class="badge ${record.time_difference_seconds <= 5 ? 'bg-warning' : 'bg-danger'}">
-                                    ${record.time_difference_seconds || 'N/A'}s
-                                </span>
-                            </td>
                         </tr>
                     `;
+                    a++;
                 });
                 
                 html += `
