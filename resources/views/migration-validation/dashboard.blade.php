@@ -533,7 +533,7 @@
                     const patientData = record.patient_data || {};
                     html += `
                         <tr>
-                            <td><code>${a} ${record.mongo_id.$oid || 'N/A'}</code></td>
+                            <td><code>${a} ${record.universal_id || 'N/A'}</code></td>
                             <td>${record.mongo_createdat || 'N/A'}</td>
                             <td>${record.modifiedat || 'N/A'}</td>
                             <td><strong>${patientData.mrn || 'N/A'}</strong></td>

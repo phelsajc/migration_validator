@@ -20,6 +20,7 @@ class MigrationValidationController extends Controller
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
             'identifier_field' => 'mrn',
+            'mongodb_identifier_field' => 'mrn',
             'pipeline_type' => 'complex',
         ],
         'careproviders' => [
@@ -52,6 +53,7 @@ class MigrationValidationController extends Controller
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
             'identifier_field' => 'bedoccupancy_id',
+            'mongodb_identifier_field' => 'bedoccupancy._id',
             'pipeline_type' => 'complex'
         ],
         'patientvisits' => [
@@ -3425,7 +3427,7 @@ class MigrationValidationController extends Controller
 
             // Get MSSQL count
             $mssqlCount = $this->getMSSQLCount($startDate, $endDate, $tableName);
-
+            //dd($startDate, $endDate, $tableName, $mongodbCount, $mssqlCount, $mongodbCount - $mssqlCount);
             // Log the counts for debugging
             Log::info('Validation counts', [
                 'table' => $tableName,
@@ -3469,6 +3471,80 @@ class MigrationValidationController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'Validation failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getValidationHistory()
+    {
+        try {
+            // This would typically come from a database table storing validation history
+            // For now, return a sample response
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'validations' => [
+                        [
+                            'id' => 1,
+                            'table' => 'patients',
+                            'mongodb_count' => 1500,
+                            'mssql_count' => 1500,
+                            'difference' => 0,
+                            'is_complete' => true,
+                            'validated_at' => now()->subHours(1)->toISOString(),
+                            'status' => 'COMPLETE'
+                        ],
+                        [
+                            'id' => 2,
+                            'table' => 'patients',
+                            'mongodb_count' => 2000,
+                            'mssql_count' => 1995,
+                            'difference' => 5,
+                            'is_complete' => false,
+                            'validated_at' => now()->subHours(2)->toISOString(),
+                            'status' => 'INCOMPLETE'
+                        ]
+                    ]
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Get validation history error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get validation history: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getAvailableTables()
+    {
+        try {
+            $tables = [];
+
+            foreach ($this->migrationTables as $tableName => $config) {
+                $tables[] = [
+                    'name' => $tableName,
+                    'mongodb_collection' => $config['mongodb_collection'],
+                    'mssql_table' => $config['mssql_table'],
+                    'pipeline_type' => $config['pipeline_type'],
+                    'identifier_field' => $config['identifier_field']
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'tables' => $tables,
+                    'total' => count($tables)
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get available tables: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -3841,35 +3917,64 @@ class MigrationValidationController extends Controller
             $startDateTime = Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s');
             $endDateTime = Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s');
 
+            // Get pipeline from getPipelineForTable and modify it to return records instead of count
+            $pipeline = $this->getPipelineForTable($tableName, $startDate, $endDate);
+       
+            // Remove the $count stage and replace with $limit if needed
+            $pipeline = array_filter($pipeline, function($stage) {
+                return !isset($stage['$count']);
+            });
+            
+            // Optionally add limit
+            /* if ($limit > 0) {
+                $pipeline[] = ['$limit' => $limit];
+            } */
+
+            // Execute aggregation pipeline to get records
             $mongoRecords = DB::connection('mongodb')
-                ->collection("{$config['mongodb_collection']}")
-                ->where('createdat', '>=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000))
-                ->where('createdat', '<=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000))
-                //->limit($limit)
-                ->get()
-                ->toArray();
+                ->collection($config['mongodb_collection'])
+                ->raw(function ($collection) use ($pipeline) {
+                    return $collection->aggregate($pipeline, [
+                        'allowDiskUse' => true,
+                        'maxTimeMS' => 300000, // 5 minutes
+                        'batchSize' => 1000
+                    ]);
+                })->toArray();
 
             // Get all MSSQL records for the date range
             $mssqlRecords = DB::connection('sqlsrv')
                 ->select("
-                    SELECT DISTINCT {$config['identifier_field']}, createddate
+                    SELECT DISTINCT {$config['identifier_field']}, {$config['date_field_mssql']}
                     FROM {$config['mssql_table']}
                     WHERE 
-                        (TRY_CONVERT(datetimeoffset, createddate, 127) 
+                        (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
                          AT TIME ZONE 'Singapore Standard Time')
-                        BETWEEN '$startDateTime' AND '$endDateTime'
+                        BETWEEN '$startDate' AND '$endDate'
                 ");
-            
-            // Convert MSSQL dates to comparable format
-            /* $mssqlDates = array_map(function ($record) {
-                return Carbon::parse($record->createddate)->format('Y-m-d H:i:s');
-            }, $mssqlRecords); */
+                
+            // Create a lookup map of MSSQL identifier values for efficient matching
+            $identifierField = $config['identifier_field'];
+            $mssqlIdentifierMap = [];
+            foreach ($mssqlRecords as $mssqlRecord) {
+                $mssqlId = $mssqlRecord->{$identifierField} ?? null;
+                if ($mssqlId !== null) {
+                    // Convert to string for consistent comparison
+                    $mssqlIdentifierMap[(string)$mssqlId] = $mssqlRecord;
+                }
+            }
 
             // Find MongoDB records that don't have matching MSSQL records
             $missingRecords = [];
             $foundMatches = 0;
-            
-            foreach ($mongoRecords as $mongoRecord) {
+            $mongoIdTest = $this->getMongoField($mongoRecords[0], $config['mongodb_identifier_field']);
+            //dd($mongoIdTest);
+            foreach ($mongoRecords as $key => $mongoRecord) {
+
+                
+                $mongoIdTest = $this->getMongoField($mongoRecords[$key], $config['mongodb_identifier_field']);
+                //dd($mongoIdTest);
+
+
                 $mongoId = $mongoRecord['_id'] ?? null;
                 $mongoDate = Carbon::parse($mongoRecord['createdat']->toDateTime())->format('Y-m-d H:i:s');
                 
@@ -3880,11 +3985,11 @@ class MigrationValidationController extends Controller
                 if ($mongoId) {
                     try {
                         // Convert MongoDB ObjectId to string if needed
-                        $mongoIdString = (string) $mongoRecord['_id'];//is_object($mongoId) ? (string)$mongoId : $mongoId;
+                        $mongoIdString = (string) $mongoIdTest;//$mongoRecord[$config['mongodb_identifier_field']];// (string) $mongoRecord[$config['mongodb_identifier_field']];//is_object($mongoId) ? (string)$mongoId : $mongoId;
                         
                         // Check if record exists in MSSQL by patient_id or _id
                         $mssqlRecord = DB::connection('sqlsrv')
-                            ->select("SELECT * FROM patients WHERE patient_id = ?", [$mongoIdString]);
+                            ->select("SELECT * FROM {$config['mssql_table']} WHERE {$config['identifier_field']} = ?", [$mongoIdString]);
                         
                         if (!empty($mssqlRecord)) {
                             $hasMatch = true;
@@ -3897,13 +4002,16 @@ class MigrationValidationController extends Controller
                         ]);
                     }
                 }
-
+                /* 691442f44172e32f3c329125 - mongodb compass
+                691442f44172e32f3c329125 - network */
                 //$oid = (string) $mongoRecord->_id; // or $doc['_id']
                 if (!$hasMatch) {
                     $missingRecords[] = [
+                        //'sqlx'=> "SELECT * FROM {$config['mssql_table']} WHERE {$config['identifier_field']} = $mongoIdString",
                         'mongo_id' => $mongoRecord['_id'] ?? 'N/A',
                         'mongo_id2' => (string) $mongoRecord['_id'],
                         'mongo_createdat' => $mongoDate,
+                        'universal_id' => $mongoIdString,
                         'modifiedat' => $mongoRecord['modifiedat']->toDateTime()->format('Y-m-d H:i:s'),
                         'mongo_createdat_original' => $mongoRecord['createdat']->toDateTime()->format('Y-m-d H:i:s.u'),
                         'mssql_check_result' => $mssqlRecord ? 'Found but no match' : 'Not found in MSSQL',
@@ -3911,6 +4019,7 @@ class MigrationValidationController extends Controller
                             'mrn' => $mongoRecord['mrn'] ?? 'N/A',
                             'id' => $mongoRecord['patient_id'] ?? $mongoRecord['id'] ?? 'N/A',
                             '_id' => $mongoRecord['_id'] ?? $mongoRecord['id'] ?? 'N/A',
+                            'bedoccupancy_id' => $mongoRecord['bedoccupancy']['_id'] ?? $mongoRecord['id'] ?? 'N/A',
                             'firstname' => $mongoRecord['firstname'] ?? 'N/A',
                             'lastname' => $mongoRecord['lastname'] ?? 'N/A',
                             'email' => $mongoRecord['email'] ?? 'N/A',
@@ -3931,14 +4040,13 @@ class MigrationValidationController extends Controller
                     'missing_records' => $missingRecords
                 ]
             ]); */
-
             return [
                 'mongo_total' => count($mongoRecords),
                 'mssql_total' => count($mssqlRecords),
                 'found_matches' => $foundMatches,
                 'missing_from_mssql' => count($missingRecords),
                 'missing_records' => $missingRecords,
-                "sql" => "SELECT createddate FROM patients WHERE (TRY_CONVERT(datetimeoffset, createddate, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEN '$startDateTime' AND '$endDateTime'"
+                "sql" => "SELECT {$config['date_field_mssql']} FROM {$config['mssql_table']} WHERE (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEN '$startDateTime' AND '$endDateTime'"
             ];
 
         } catch (Exception $e) {
@@ -3948,6 +4056,17 @@ class MigrationValidationController extends Controller
             ]);
             return null;
         }
+    }
+
+    function getMongoField($record, $path) {
+        $keys = explode('.', $path);
+    
+        foreach ($keys as $key) {
+            if (!isset($record[$key])) return null;
+            $record = $record[$key];
+        }
+    
+        return $record;
     }
 
     /**
@@ -3993,8 +4112,7 @@ class MigrationValidationController extends Controller
                 // Check if this MSSQL record has a corresponding MongoDB record
                 $hasMatch = false;
                 foreach ($mongoDates as $mongoDate) {
-                    // Allow for small time differences (within 1 second)
-                    if (abs(Carbon::parse($mssqlDate)->diffInSeconds(Carbon::parse($mongoDate))) <= 1) {
+                    if ($mongoDate === $mssqlDate) {
                         $hasMatch = true;
                         $foundMatches++;
                         break;
@@ -4003,8 +4121,8 @@ class MigrationValidationController extends Controller
 
                 if (!$hasMatch) {
                     $extraRecords[] = [
-                        'mssql_modifieddate' => $mssqlDate,
-                        'mssql_modifieddate_original' => $mssqlRecord->modifieddate
+                        'mssql_date' => $mssqlDate,
+                        'mssql_modifieddate' => $mssqlRecord->modifieddate
                     ];
                 }
             }
@@ -4028,167 +4146,5 @@ class MigrationValidationController extends Controller
             ], 500);
         }
     }
-
-    /**
-     * Get list of available tables for validation
-     */
-    public function getAvailableTables()
-    {
-        try {
-            $tables = [];
-
-            foreach ($this->migrationTables as $tableName => $config) {
-                $tables[] = [
-                    'name' => $tableName,
-                    'mongodb_collection' => $config['mongodb_collection'],
-                    'mssql_table' => $config['mssql_table'],
-                    'pipeline_type' => $config['pipeline_type'],
-                    'identifier_field' => $config['identifier_field']
-                ];
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'tables' => $tables,
-                    'total' => count($tables)
-                ]
-            ]);
-
-        } catch (Exception $e) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Failed to get available tables: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get validation history
-     */
-    public function getValidationHistory()
-    {
-        try {
-            // This would typically come from a database table storing validation history
-            // For now, return a sample response
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'validations' => [
-                        [
-                            'id' => 1,
-                            'table' => 'patients',
-                            'mongodb_count' => 1500,
-                            'mssql_count' => 1500,
-                            'difference' => 0,
-                            'is_complete' => true,
-                            'validated_at' => now()->subHours(1)->toISOString(),
-                            'status' => 'COMPLETE'
-                        ],
-                        [
-                            'id' => 2,
-                            'table' => 'patients',
-                            'mongodb_count' => 2000,
-                            'mssql_count' => 1995,
-                            'difference' => 5,
-                            'is_complete' => false,
-                            'validated_at' => now()->subHours(2)->toISOString(),
-                            'status' => 'INCOMPLETE'
-                        ]
-                    ]
-                ]
-            ]);
-
-        } catch (Exception $e) {
-            Log::error('Get validation history error: ' . $e->getMessage());
-
-            return response()->json([
-                'success' => false,
-                'error' => 'Failed to get validation history: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Validate multiple tables at once
-     */
-    public function validateAllTables(Request $request)
-    {
-        try {
-            // Handle both GET and POST requests with proper date formatting
-            $startDateInput = $request->input('start_date', $request->query('start_date', now()->format('Y-m-d')));
-            $endDateInput = $request->input('end_date', $request->query('end_date', now()->format('Y-m-d')));
-
-            // Format dates properly for MongoDB
-            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
-            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
-
-            // Get all configured tables
-            $tables = array_keys($this->migrationTables);
-            $results = [];
-
-            foreach ($tables as $table) {
-                try {
-                    $mongodbCount = $this->getMongoDBCount($startDate, $endDate, $table);
-                    $mssqlCount = $this->getMSSQLCount($startDate, $endDate, $table);
-                    $difference = $mongodbCount - $mssqlCount;
-
-                    // Get missing records analysis
-                    //$missingRecordsAnalysis = $this->getMissingRecordsAnalysis($table, $startDate, $endDate, 50);
-
-                    $results[] = [
-                        'table' => $table,
-                        'mongodb_count' => $mongodbCount,
-                        'mssql_count' => $mssqlCount,
-                        'difference' => $difference,
-                        'is_complete' => $difference === 0,
-                        'status' => $difference === 0 ? 'COMPLETE' : 'INCOMPLETE',
-                        //'missing_records_analysis' => $missingRecordsAnalysis
-                    ];
-                } catch (Exception $tableException) {
-                    Log::error('Table validation failed', [
-                        'table' => $table,
-                        'error' => $tableException->getMessage()
-                    ]);
-
-                    $results[] = [
-                        'table' => $table,
-                        'mongodb_count' => 0,
-                        'mssql_count' => 0,
-                        'difference' => 0,
-                        'is_complete' => false,
-                        'status' => 'ERROR',
-                        'error' => $tableException->getMessage()
-                    ];
-                }
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'validations' => $results,
-                    'summary' => [
-                        'total_tables' => count($tables),
-                        'complete_tables' => count(array_filter($results, function ($r) {
-                            return $r['is_complete'];
-                        })),
-                        'incomplete_tables' => count(array_filter($results, function ($r) {
-                            return !$r['is_complete'] && !isset($r['error']);
-                        })),
-                        'error_tables' => count(array_filter($results, function ($r) {
-                            return isset($r['error']);
-                        }))
-                    ]
-                ]
-            ]);
-
-        } catch (Exception $e) {
-            Log::error('Validate all tables error: ' . $e->getMessage());
-
-            return response()->json([
-                'success' => false,
-                'error' => 'Validation failed: ' . $e->getMessage()
-            ], 500);
-        }
-    }
 }
+                    
