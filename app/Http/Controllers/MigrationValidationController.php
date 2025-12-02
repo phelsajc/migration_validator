@@ -29,6 +29,7 @@ class MigrationValidationController extends Controller
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
             'identifier_field' => 'careprovider_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex',
         ],
         'patientorderitems' => [
@@ -4002,12 +4003,9 @@ class MigrationValidationController extends Controller
                         ]);
                     }
                 }
-                /* 691442f44172e32f3c329125 - mongodb compass
-                691442f44172e32f3c329125 - network */
-                //$oid = (string) $mongoRecord->_id; // or $doc['_id']
+                
                 if (!$hasMatch) {
                     $missingRecords[] = [
-                        //'sqlx'=> "SELECT * FROM {$config['mssql_table']} WHERE {$config['identifier_field']} = $mongoIdString",
                         'mongo_id' => $mongoRecord['_id'] ?? 'N/A',
                         'mongo_id2' => (string) $mongoRecord['_id'],
                         'mongo_createdat' => $mongoDate,
@@ -4015,7 +4013,7 @@ class MigrationValidationController extends Controller
                         'modifiedat' => $mongoRecord['modifiedat']->toDateTime()->format('Y-m-d H:i:s'),
                         'mongo_createdat_original' => $mongoRecord['createdat']->toDateTime()->format('Y-m-d H:i:s.u'),
                         'mssql_check_result' => $mssqlRecord ? 'Found but no match' : 'Not found in MSSQL',
-                        'patient_data' => [
+                        /* 'patient_data' => [
                             'mrn' => $mongoRecord['mrn'] ?? 'N/A',
                             'id' => $mongoRecord['patient_id'] ?? $mongoRecord['id'] ?? 'N/A',
                             '_id' => $mongoRecord['_id'] ?? $mongoRecord['id'] ?? 'N/A',
@@ -4024,22 +4022,11 @@ class MigrationValidationController extends Controller
                             'lastname' => $mongoRecord['lastname'] ?? 'N/A',
                             'email' => $mongoRecord['email'] ?? 'N/A',
                             'phone' => $mongoRecord['phone'] ?? 'N/A'
-                        ]
+                        ] */
                     ];
                 }
             }
 
-            /* return response()->json([
-                'success' => true,
-                'analysis' => [
-                    'date_range' => $startDateInput . ' to ' . $endDateInput,
-                    'mongo_total' => count($mongoRecords),
-                    'mssql_total' => count($mssqlRecords),
-                    'found_matches' => $foundMatches,
-                    'missing_from_mssql' => count($missingRecords),
-                    'missing_records' => $missingRecords
-                ]
-            ]); */
             return [
                 'mongo_total' => count($mongoRecords),
                 'mssql_total' => count($mssqlRecords),
