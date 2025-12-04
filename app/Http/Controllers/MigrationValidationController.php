@@ -38,7 +38,7 @@ class MigrationValidationController extends Controller
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
             'identifier_field' => 'patientorderitems_id',
-            'mongodb_identifier_field' => '_id',
+            'mongodb_identifier_field' => 'patientorderitems._id',
             'pipeline_type' => 'complex'
         ],
         'patientorders' => [
@@ -4021,7 +4021,6 @@ class MigrationValidationController extends Controller
             $foundMatches = 0;
             $mongoTotal = 0;
             $firstRecord = null;
-            
             // Process MongoDB records one at a time using cursor (prevents memory exhaustion)
             foreach ($mongoCursor as $mongoRecord) {
                 $mongoTotal++;
