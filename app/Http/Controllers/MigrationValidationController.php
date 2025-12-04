@@ -35,9 +35,10 @@ class MigrationValidationController extends Controller
         'patientorderitems' => [
             'mongodb_collection' => 'patientorders',
             'mssql_table' => 'patientorderitems',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'patientorderitems_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'patientorders' => [
@@ -3956,6 +3957,9 @@ class MigrationValidationController extends Controller
     private function getMissingRecordsAnalysis($tableName, $startDate, $endDate, $limit = 50)
     {
         try {
+            // Increase execution time limit for large datasets
+            set_time_limit(600); // 10 minutes
+            
             $config = $this->migrationTables[$tableName];
             $startDateInput = Carbon::parse($startDate)->format('Y-m-d');
             $endDateInput = Carbon::parse($endDate)->format('Y-m-d');
@@ -3976,16 +3980,18 @@ class MigrationValidationController extends Controller
                 $pipeline[] = ['$limit' => $limit];
             } */
 
-            // Execute aggregation pipeline to get records
-            $mongoRecords = DB::connection('mongodb')
+            // Execute aggregation pipeline to get records using cursor (prevents memory exhaustion)
+            // Don't use toArray() - process via cursor to avoid loading all records into memory
+            $mongoCursor = DB::connection('mongodb')
                 ->collection($config['mongodb_collection'])
                 ->raw(function ($collection) use ($pipeline) {
                     return $collection->aggregate($pipeline, [
                         'allowDiskUse' => true,
                         'maxTimeMS' => 300000, // 5 minutes
-                        'batchSize' => 1000
+                        'batchSize' => 1000,
+                        'cursor' => ['batchSize' => 1000]
                     ]);
-                })->toArray();
+                });
 
             // Get all MSSQL records for the date range
             $mssqlRecords = DB::connection('sqlsrv')
@@ -4010,21 +4016,30 @@ class MigrationValidationController extends Controller
             }
 
             // Find MongoDB records that don't have matching MSSQL records
+            // Process via cursor to avoid loading all records into memory at once
             $missingRecords = [];
             $foundMatches = 0;
-            $mongoIdTest = $this->getMongoField($mongoRecords[0], $config['mongodb_identifier_field']);
-            //dd($mongoIdTest);
-            foreach ($mongoRecords as $key => $mongoRecord) {
-
-
-                $mongoIdTest = $this->getMongoField($mongoRecords[$key], $config['mongodb_identifier_field']);
+            $mongoTotal = 0;
+            $firstRecord = null;
+            
+            // Process MongoDB records one at a time using cursor (prevents memory exhaustion)
+            foreach ($mongoCursor as $mongoRecord) {
+                $mongoTotal++;
+                
+                // Store first record for the test (same as original code)
+                if ($mongoTotal === 1) {
+                    $firstRecord = $mongoRecord;
+                }
+                
+                // Get identifier field value (same logic as original)
+                $mongoIdTest = $this->getMongoField($mongoRecord, $config['mongodb_identifier_field']);
                 //dd($mongoIdTest);
-
 
                 $mongoId = $mongoRecord['_id'] ?? null;
                 $mongoDate = Carbon::parse($mongoRecord['createdat']->toDateTime())->format('Y-m-d H:i:s');
 
                 // Check if this MongoDB record exists in MSSQL by ID
+                // Use pre-loaded map for fast in-memory lookup (same results, much faster than database queries)
                 $hasMatch = false;
                 $mssqlRecord = null;
 
@@ -4033,11 +4048,9 @@ class MigrationValidationController extends Controller
                         // Convert MongoDB ObjectId to string if needed
                         $mongoIdString = (string) $mongoIdTest;//$mongoRecord[$config['mongodb_identifier_field']];// (string) $mongoRecord[$config['mongodb_identifier_field']];//is_object($mongoId) ? (string)$mongoId : $mongoId;
 
-                        // Check if record exists in MSSQL by patient_id or _id
-                        $mssqlRecord = DB::connection('sqlsrv')
-                            ->select("SELECT * FROM {$config['mssql_table']} WHERE {$config['identifier_field']} = ?", [$mongoIdString]);
-
-                        if (!empty($mssqlRecord)) {
+                        // Use in-memory map lookup instead of database query (produces same results, much faster)
+                        if (isset($mssqlIdentifierMap[$mongoIdString])) {
+                            $mssqlRecord = $mssqlIdentifierMap[$mongoIdString];
                             $hasMatch = true;
                             $foundMatches++;
                         }
@@ -4050,7 +4063,7 @@ class MigrationValidationController extends Controller
                 }
 
                 if (!$hasMatch) {
-                    //dd($mongoRecords[$key]);
+                    //dd($mongoRecord);
                     $missingRecords[] = [
                         'mongo_id' => $mongoRecord['_id'] ?? 'N/A',
                         'mongo_id2' => (string) $mongoRecord['_id'],
@@ -4074,7 +4087,7 @@ class MigrationValidationController extends Controller
             }
 
             return [
-                'mongo_total' => count($mongoRecords),
+                'mongo_total' => $mongoTotal, // Count as we process instead of count($mongoRecords)
                 'mssql_total' => count($mssqlRecords),
                 'found_matches' => $foundMatches,
                 'missing_from_mssql' => count($missingRecords),
