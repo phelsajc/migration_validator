@@ -326,7 +326,7 @@
                 // Safe property access with fallbacks
                 const table = result.table || 'Unknown';
                 const mongodbCount = result.mongodb_count || 0;
-                const mssqlCount = result.mssql_count || 0;
+                const mssqlCount = result.missing_records_analysis.found_matches || null;//result.mssql_count || 0;
                 const difference = result.difference || 0;
                 const isComplete = result.is_complete || false;
                 const status = result.status || 'UNKNOWN';
