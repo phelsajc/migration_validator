@@ -36,7 +36,7 @@ class MigrationValidationController extends Controller
             'mongodb_collection' => 'patientorders',
             'mssql_table' => 'patientorderitems',
             'date_field_mongo' => 'createdat',
-            'date_field_mssql' => 'createddate',
+            'date_field_mssql' => 'createdat',
             'identifier_field' => 'patientorderitems_id',
             'mongodb_identifier_field' => 'patientorderitems._id',
             'pipeline_type' => 'complex'
@@ -62,161 +62,181 @@ class MigrationValidationController extends Controller
         'patientvisits' => [
             'mongodb_collection' => 'patientvisits',
             'mssql_table' => 'patientvisits',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'patientvisits_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'payors' => [
             'mongodb_collection' => 'payors',
             'mssql_table' => 'payors',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'payor_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'dischargeprocesses' => [
             'mongodb_collection' => 'dischargeprocesses',
             'mssql_table' => 'dischargeprocesses',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'dischargeprocesses_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'patientbills' => [
             'mongodb_collection' => 'patientbills',
             'mssql_table' => 'patientbills',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'patientbills_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'patientbilleditems' => [
             'mongodb_collection' => 'patientbills',
             'mssql_table' => 'patientbilleditems',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'patientbilleditems_id',
+            'mongodb_identifier_field' => 'patientbilleditems._id',
             'pipeline_type' => 'complex'
         ],
         'patientprocedures' => [
             'mongodb_collection' => 'patientprocedures',
             'mssql_table' => 'patientprocedures',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'patientprocedures_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'patientpackages' => [
             'mongodb_collection' => 'patientpackages',
             'mssql_table' => 'patientpackages',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'patientpackages_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'patientpackages_orderitems' => [
             'mongodb_collection' => 'patientpackages',
             'mssql_table' => 'patientpackagesorderitems',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'insertedtimestamp',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'patientpackagesorderitems_id',
+            'mongodb_identifier_field' => 'orderitems._id',
             'pipeline_type' => 'complex'
         ],
         'patientbilleditempayments' => [
             'mongodb_collection' => 'patientbilleditempayments',
             'mssql_table' => 'patientbilleditempayments',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'patientbilleditempayments_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'patientbilldeductions_careprovider' => [
             'mongodb_collection' => 'patientbilldeductions',
             'mssql_table' => 'patientbilldeductionscareprovider',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'careproviderdata_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'patientbills_paymentdetails' => [
             'mongodb_collection' => 'patientbills',
             'mssql_table' => 'patientbills_paymentdetails',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'insertedtimestamp',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'paymentdetails_id',
+            'mongodb_identifier_field' => 'paymentdetails._id',
             'pipeline_type' => 'complex'
         ],
         'deposits' => [
             'mongodb_collection' => 'deposits',
             'mssql_table' => 'deposits',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'deposits_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'visitpayors' => [
             'mongodb_collection' => 'patientvisits',
             'mssql_table' => 'visitpayors',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'patientvisits_visitpayors_id',
+            'mongodb_identifier_field' => 'visitpayors._id',
             'pipeline_type' => 'complex'
         ],
         'goodsreceives' => [
             'mongodb_collection' => 'goodsreceives',
             'mssql_table' => 'goodsreceive',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'goodsreceives_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'goodsreceives_itemdetails' => [
             'mongodb_collection' => 'goodsreceives',
             'mssql_table' => 'goodsreceives_items',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'goodsreceives_itemdetails_id',
+            'mongodb_identifier_field' => 'itemdetails._id',
             'pipeline_type' => 'complex'
         ],
         'stock_trans_iss' => [
             'mongodb_collection' => 'stocktransfers',
             'mssql_table' => 'stock_trans_iss',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'stocktransfers_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'stock_trans_iss_items' => [
             'mongodb_collection' => 'stocktransfers',
             'mssql_table' => 'stock_trans_iss_items',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'stocktransfers_itemdetails_id',
+            'mongodb_identifier_field' => 'itemdetails._id',
             'pipeline_type' => 'complex'
         ],
         'stock_returns' => [
             'mongodb_collection' => 'stocktransferreturns',
             'mssql_table' => 'stock_returns',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'stockreturns_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'stock_returns_items' => [
             'mongodb_collection' => 'stocktransferreturns',
             'mssql_table' => 'stock_returns_items',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'stockreturns_itemdetails_id',
+            'mongodb_identifier_field' => 'itemdetails._id',
             'pipeline_type' => 'complex'
         ],
         'orderitemcodes' => [
             'mongodb_collection' => 'orderitems',
             'mssql_table' => 'orderitemcodes',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'insertedtimestamp',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'code',
+            'mongodb_identifier_field' => 'code',
             'pipeline_type' => 'complex'
         ],
         'departments' => [
@@ -667,7 +687,6 @@ class MigrationValidationController extends Controller
                             ]
                         ]
                     ],
-
                     [
                         '$lookup' => [
                             'from' => 'organisations',
@@ -843,6 +862,65 @@ class MigrationValidationController extends Controller
             case 'payors':
                 return [
                     [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'payortypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'typeDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$typeDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+
+                    [
+                        '$lookup' => [
+                            'from' => 'tpas',
+                            'localField' => 'associatedpayoragreementsandtpa.tpauid',
+                            'foreignField' => '_id',
+                            'as' => 'tpasDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$tpasDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'tpasDetails.credittermuid',
+                            'foreignField' => '_id',
+                            'as' => 'tpasCreditDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$tpasCreditDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
                         '$match' => [
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
@@ -851,75 +929,11 @@ class MigrationValidationController extends Controller
                         ]
                     ],
                     [
-                        '$lookup' => [
-                            'as' => 'typeDetails',
-                            'from' => 'referencevalues',
-                            'foreignField' => '_id',
-                            'localField' => 'payortypeuid',
-                        ]
-                    ],
-                    [
-                        '$unwind' => [
-                            'path' => '$typeDetails',
-                            'preserveNullAndEmptyArrays' => true,
-                        ]
-                    ],
-                    [
-                        '$lookup' => [
-                            'as' => 'tpasDetails',
-                            'from' => 'tpas',
-                            'foreignField' => '_id',
-                            'localField' => 'associatedpayoragreementsandtpa.tpauid',
-                        ]
-                    ],
-                    [
-                        '$unwind' => [
-                            'path' => '$tpasDetails',
-                            'preserveNullAndEmptyArrays' => true,
-                        ]
-                    ],
-                    [
-                        '$lookup' => [
-                            'as' => 'tpasCreditDetails',
-                            'from' => 'referencevalues',
-                            'foreignField' => '_id',
-                            'localField' => 'tpasDetails.credittermuid',
-                        ]
-                    ],
-                    [
-                        '$unwind' => [
-                            'path' => '$tpasCreditDetails',
-                            'preserveNullAndEmptyArrays' => true,
-                        ]
-                    ],
-                    [
-                        '$lookup' => [
-                            'from' => 'organisations',
-                            'localField' => 'orguid',
-                            'foreignField' => '_id',
-                            'as' => 'orgDetails',
-                        ]
-                    ],
-                    [
-                        '$unwind' => [
-                            'path' => '$orgDetails',
-                            'preserveNullAndEmptyArrays' => true,
-                        ]
-                    ],
-                    [
                         '$count' => 'Total'
                     ]
                 ];
             case 'dischargeprocesses':
                 return [
-                    [
-                        '$match' => [
-                            'modifiedat' => [
-                                '$gte' => $startISODate,
-                                '$lte' => $endISODate
-                            ]
-                        ]
-                    ],
                     [
                         '$lookup' => [
                             'from' => 'organisations',
@@ -963,19 +977,19 @@ class MigrationValidationController extends Controller
                         ]
                     ],
                     [
-                        '$count' => 'Total'
-                    ]
-                ];
-            case 'patientbills':
-                return [
-                    [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
                         ]
                     ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'patientbills':
+                return [
                     [
                         '$lookup' => [
                             'as' => "entypeDetails",
@@ -1023,19 +1037,238 @@ class MigrationValidationController extends Controller
                         ]
                     ],
                     [
-                        '$count' => 'Total'
-                    ]
-                ];
-            case 'patientprocedures':
-                return [
-                    [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
                         ]
                     ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'patientbilleditems':
+                return [
+                    [
+                        '$unwind' => [
+                            'path' => '$patientbilleditems',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'patientbilleditems.billinggroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'billinggroupDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$billinggroupDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'patientbilleditems.billingsubgroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'billingsubgroupDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$billingsubgroupDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'billingsubgroupDetails.chargegroupcodeuid',
+                            'foreignField' => '_id',
+                            'as' => 'itemgroupDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$itemgroupDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'patientbilleditems.ordertodepartmentuid',
+                            'foreignField' => '_id',
+                            'as' => 'departmentDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$departmentDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'tariffs',
+                            'localField' => 'patientbilleditems.tariffuid',
+                            'foreignField' => '_id',
+                            'as' => 'tariffDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$tariffDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$set' => [
+                            'discountLookupIds' => [
+                                '$cond' => [
+                                    'if' => [
+                                        '$gt' => [
+                                            [
+                                                '$size' => [
+                                                    '$ifNull' => ['$patientbilleditems.specialdiscountcodeuids', []]
+                                                ]
+                                            ],
+                                            0
+                                        ]
+                                    ],
+                                    'then' => '$patientbilleditems.specialdiscountcodeuids',
+                                    'else' => '$patientbilleditems.specialdiscountinfo.specialdiscountcodeuid'
+                                ]
+                            ]
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'discountcodes',
+                            'localField' => 'discountLookupIds',
+                            'foreignField' => '_id',
+                            'as' => 'discountcodesDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$discountcodesDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$unset' => 'discountLookupIds'
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'patientbilleditems.agreementdiscounttypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'payorDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$payorDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+
+
+                    [
+                        '$lookup' => [
+                            'from' => 'patientorders',
+                            'localField' => 'patientbilleditems.patientorderuid',
+                            'foreignField' => '_id',
+                            'as' => 'pxOrder'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$pxOrder',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'wards',
+                            'localField' => 'pxOrder.warduid',
+                            'foreignField' => '_id',
+                            'as' => 'wards'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$wards',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'departments',
+                            'localField' => 'patientbilleditems.ordertodepartmentuid',
+                            'foreignField' => '_id',
+                            'as' => 'orderDepDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orderDepDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'orderitems',
+                            'localField' => 'patientbilleditems.orderitemuid',
+                            'foreignField' => '_id',
+                            'as' => 'orderItemDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orderItemDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$patientbilleditems.specialdiscountinfo',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'patientprocedures':
+                return [
                     [
                         '$unwind' => [
                             'path' => '$procedures',
@@ -1099,19 +1332,19 @@ class MigrationValidationController extends Controller
                         ],
                     ],
                     [
-                        '$count' => 'Total'
-                    ]
-                ];
-            case 'patientpackages':
-                return [
-                    [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
                         ]
                     ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'patientpackages':
+                return [
                     [
                         '$lookup' => [
                             'from' => 'users',
@@ -1293,9 +1526,18 @@ class MigrationValidationController extends Controller
                         ]
                     ],
                     [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
                         '$count' => 'Total'
                     ]
                 ];
+            #check
             case 'patientpackages_orderitems':
                 return [
                     [
@@ -1497,10 +1739,14 @@ class MigrationValidationController extends Controller
                             'careproviderdata' => [
                                 '$ne' => null,
                             ],
-                            'modifiedat' => [
-                                '$gte' => $startISODate,
-                                '$lte' => $endISODate
-                            ]
+                            [
+                                '$match' => [
+                                    'modifiedat' => [
+                                        '$gte' => $startISODate,
+                                        '$lte' => $endISODate
+                                    ]
+                                ]
+                            ],
                         ]
                     ],
                     [
@@ -1633,6 +1879,7 @@ class MigrationValidationController extends Controller
                         '$count' => 'Total'
                     ]
                 ];
+            #check above date filter
             case 'visitpayors':
                 return [
                     [
@@ -1685,7 +1932,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -1769,7 +2016,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -1873,7 +2120,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -1971,7 +2218,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2047,7 +2294,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2159,7 +2406,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2235,7 +2482,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2269,7 +2516,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2297,7 +2544,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2353,7 +2600,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2409,7 +2656,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2419,6 +2666,7 @@ class MigrationValidationController extends Controller
                         '$count' => 'Total'
                     ]
                 ];
+            #check pipeline
             case 'payortpaagreement':
                 return [
                     [
@@ -2479,7 +2727,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2886,7 +3134,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -3030,7 +3278,7 @@ class MigrationValidationController extends Controller
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
-                            ],
+                            ]
                         ]
                     ],
                     [
@@ -3407,7 +3655,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -3959,7 +4207,7 @@ class MigrationValidationController extends Controller
         try {
             // Increase execution time limit for large datasets
             set_time_limit(600); // 10 minutes
-            
+
             $config = $this->migrationTables[$tableName];
             $startDateInput = Carbon::parse($startDate)->format('Y-m-d');
             $endDateInput = Carbon::parse($endDate)->format('Y-m-d');
@@ -3996,13 +4244,15 @@ class MigrationValidationController extends Controller
             // Get all MSSQL records for the date range
             $mssqlRecords = DB::connection('sqlsrv')
                 ->select("
-                    SELECT DISTINCT {$config['identifier_field']}, {$config['date_field_mssql']}
-                    FROM {$config['mssql_table']}
-                    WHERE 
-                        (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
-                         AT TIME ZONE 'Singapore Standard Time')
-                        BETWEEN '$startDate' AND '$endDate'
-                ");
+                SELECT DISTINCT {$config['identifier_field']}, {$config['date_field_mssql']}
+                FROM {$config['mssql_table']}
+                WHERE 
+                    (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
+                     AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time')
+                    BETWEEN '$startDate' AND '$endDate'
+            ");
+            //dd($mssqlRecords);
+
 
             // Create a lookup map of MSSQL identifier values for efficient matching
             $identifierField = $config['identifier_field'];
@@ -4014,7 +4264,6 @@ class MigrationValidationController extends Controller
                     $mssqlIdentifierMap[(string) $mssqlId] = $mssqlRecord;
                 }
             }
-
             // Find MongoDB records that don't have matching MSSQL records
             // Process via cursor to avoid loading all records into memory at once
             $missingRecords = [];
@@ -4024,12 +4273,12 @@ class MigrationValidationController extends Controller
             // Process MongoDB records one at a time using cursor (prevents memory exhaustion)
             foreach ($mongoCursor as $mongoRecord) {
                 $mongoTotal++;
-                
+
                 // Store first record for the test (same as original code)
                 if ($mongoTotal === 1) {
                     $firstRecord = $mongoRecord;
                 }
-                
+
                 // Get identifier field value (same logic as original)
                 $mongoIdTest = $this->getMongoField($mongoRecord, $config['mongodb_identifier_field']);
                 //dd($mongoIdTest);
@@ -4064,10 +4313,10 @@ class MigrationValidationController extends Controller
                 if (!$hasMatch) {
                     //dd($mongoRecord);
                     $missingRecords[] = [
-                        'mongo_id' => $mongoRecord['_id'] ?? 'N/A',
+                        'mongo_id' => $mongoRecord['_id'],//?? 'N/A',
                         'mongo_id2' => (string) $mongoRecord['_id'],
                         'mongo_createdat' => $mongoDate,
-                        'universal_id' => $mongoIdString,
+                        'universal_id' => $mongoIdString != null ? $mongoIdString : (string) $mongoRecord['_id'],
                         'modifiedat' => $mongoRecord['modifiedat']->toDateTime()->format('Y-m-d H:i:s'),
                         'mongo_createdat_original' => $mongoRecord['createdat']->toDateTime()->format('Y-m-d H:i:s.u'),
                         'mssql_check_result' => $mssqlRecord ? 'Found but no match' : 'Not found in MSSQL',
@@ -4091,7 +4340,7 @@ class MigrationValidationController extends Controller
                 'found_matches' => $foundMatches,
                 'missing_from_mssql' => count($missingRecords),
                 'missing_records' => $missingRecords,
-                "sql" => "SELECT {$config['date_field_mssql']} FROM {$config['mssql_table']} WHERE (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEN '$startDateTime' AND '$endDateTime'"
+                //"sql" => "SELECT {$config['date_field_mssql']} FROM {$config['mssql_table']} WHERE (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEN '$startDateTime' AND '$endDateTime'"
             ];
 
         } catch (Exception $e) {
