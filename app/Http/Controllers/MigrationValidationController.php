@@ -312,14 +312,13 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
-        #not tested
         'stockledgersdetails' => [
             'mongodb_collection' => 'stockledgers',
             'mssql_table' => 'stockledgersdetails',
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
-            'identifier_field' => '_id',
-            'mongodb_identifier_field' => 'paymentdetails._id',
+            'identifier_field' => 'stockledgersdetails_id',
+            'mongodb_identifier_field' => 'ledgerdetails._id',
             'pipeline_type' => 'complex'
         ],
         'tariff_master' => [
@@ -336,8 +335,8 @@ class MigrationValidationController extends Controller
             'mssql_table' => 'patientchargecodes',
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
-            'identifier_field' => '_id',
-            'mongodb_identifier_field' => 'paymentdetails._id',
+            'identifier_field' => 'chargecodes_id',
+            'mongodb_identifier_field' => 'chargecodes._id',
             'pipeline_type' => 'complex'
         ],
         'stockdispenses' => [
@@ -345,32 +344,35 @@ class MigrationValidationController extends Controller
             'mssql_table' => 'stockdispenses',
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
-            'identifier_field' => '_id',
-            'mongodb_identifier_field' => 'paymentdetails._id',
+            'identifier_field' => 'stockdispensesitemdetails_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'patientbilldeductions' => [
             'mongodb_collection' => 'patientbilldeductions',
             'mssql_table' => 'patientbilldeductions',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
             'identifier_field' => '_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'lab_exams' => [
             'mongodb_collection' => 'labresults',
             'mssql_table' => 'examresult',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'examresult_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'rad_exams' => [
             'mongodb_collection' => 'radiologyresults',
             'mssql_table' => 'examresult',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'examresult_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],//43
     ];
@@ -2939,7 +2941,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'orderitemuid' => [ '$ne' => null ]
+                            'orderitemuid' => ['$ne' => null]
                         ]
                     ],
                     [
@@ -3133,7 +3135,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -3269,13 +3271,8 @@ class MigrationValidationController extends Controller
                         '$count' => 'Total'
                     ]
                 ];
-                case 'patientchargecodes':
+            case 'patientchargecodes':
                 return [
-                    [
-                        '$match' => [
-                            'chargecodes._id' => ['$exists' => true, '$ne' => null]
-                        ]
-                    ],
                     [
                         '$unwind' => [
                             'path' => '$chargecodes',
@@ -3378,6 +3375,11 @@ class MigrationValidationController extends Controller
                         '$unwind' => [
                             'path' => '$orgDetails',
                             'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$match' => [
+                            'chargecodes._id' => ['$exists' => true, '$ne' => null]
                         ]
                     ],
                     [
@@ -3569,7 +3571,6 @@ class MigrationValidationController extends Controller
                             'preserveNullAndEmptyArrays' => true
                         ]
                     ],
-                    
                     [
                         '$match' => [
                             $config['date_field_mongo'] => [
@@ -3680,6 +3681,106 @@ class MigrationValidationController extends Controller
                     [
                         '$unwind' => [
                             'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'lab_exams':
+                return [
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'let' => ['statusId' => '$statusuid'],
+                            'pipeline' => [
+                                ['$match' => ['$expr' => ['$eq' => ['$_id', '$$statusId']]]],
+                                ['$project' => ['valuedescription' => 1]]
+                            ],
+                            'as' => 'resultDetails'
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'let' => ['orgId' => '$orguid'],
+                            'pipeline' => [
+                                ['$match' => ['$expr' => ['$eq' => ['$_id', '$$orgId']]]],
+                                ['$project' => ['code' => 1]]
+                            ],
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'patientorders',
+                            'localField' => 'patientorderitemuid',
+                            'foreignField' => 'patientorderitems._id',
+                            'as' => 'orderDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orderDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+            case 'rad_exams':
+                return [
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'let' => ['statusId' => '$statusuid'],
+                            'pipeline' => [
+                                ['$match' => ['$expr' => ['$eq' => ['$_id', '$$statusId']]]],
+                                ['$project' => ['valuedescription' => 1]]
+                            ],
+                            'as' => 'resultDetails'
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'let' => ['orgId' => '$orguid'],
+                            'pipeline' => [
+                                ['$match' => ['$expr' => ['$eq' => ['$_id', '$$orgId']]]],
+                                ['$project' => ['code' => 1]]
+                            ],
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'patientorders',
+                            'localField' => 'patientorderitemuid',
+                            'foreignField' => 'patientorderitems._id',
+                            'as' => 'orderDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orderDetails',
                             'preserveNullAndEmptyArrays' => true
                         ]
                     ],
