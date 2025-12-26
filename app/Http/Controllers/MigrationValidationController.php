@@ -260,73 +260,93 @@ class MigrationValidationController extends Controller
         'tpas' => [
             'mongodb_collection' => 'tpas',
             'mssql_table' => 'tpa',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'tpa_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'payortpaagreement' => [
             'mongodb_collection' => 'payors',
             'mssql_table' => 'payortpaagreement',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'payor_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'itemmasters' => [
             'mongodb_collection' => 'itemmasters',
             'mssql_table' => 'itemmasters',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'itemmasters_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'patientbilleditempayments_paymentdetails' => [
             'mongodb_collection' => 'patientbilleditempayments',
             'mssql_table' => 'patientbilleditempayments_paymentdetails',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'paymentdetails_id_PK',
+            'mongodb_identifier_field' => 'paymentdetails._id',
             'pipeline_type' => 'complex'
         ],
+        #not tested, need to check if the orderitemuid is correct, need unique orderitemuid for each itembillinggroup
         'itembillinggroup' => [
             'mongodb_collection' => 'tariffs',
             'mssql_table' => 'itembillinggroup',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'orderitem_id',
+            'mongodb_identifier_field' => 'orderitemuid',
             'pipeline_type' => 'complex'
         ],
         'stockledgers' => [
             'mongodb_collection' => 'stockledgers',
             'mssql_table' => 'stockledgers',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
-            'identifier_field' => '_id',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'stockledgers_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        #not tested
         'stockledgersdetails' => [
             'mongodb_collection' => 'stockledgers',
             'mssql_table' => 'stockledgersdetails',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifieddate',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
             'identifier_field' => '_id',
+            'mongodb_identifier_field' => 'paymentdetails._id',
+            'pipeline_type' => 'complex'
+        ],
+        'tariff_master' => [
+            'mongodb_collection' => 'tariffs',
+            'mssql_table' => 'tariffs',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'tariffs_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'patientchargecodes' => [
             'mongodb_collection' => 'patientchargecodes',
             'mssql_table' => 'patientchargecodes',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifiedat',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
             'identifier_field' => '_id',
+            'mongodb_identifier_field' => 'paymentdetails._id',
             'pipeline_type' => 'complex'
         ],
         'stockdispenses' => [
             'mongodb_collection' => 'stockdispenses',
             'mssql_table' => 'stockdispenses',
-            'date_field_mongo' => 'modifiedat',
-            'date_field_mssql' => 'modifiedat',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
             'identifier_field' => '_id',
+            'mongodb_identifier_field' => 'paymentdetails._id',
             'pipeline_type' => 'complex'
         ],
         'patientbilldeductions' => [
@@ -2671,9 +2691,80 @@ class MigrationValidationController extends Controller
             #check pipeline
             case 'payortpaagreement':
                 return [
+
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'payortypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'payorDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$payorDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'tpas',
+                            'localField' => 'associatedpayoragreementsandtpa.tpauid',
+                            'foreignField' => '_id',
+                            'as' => 'tpasDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$tpasDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'tpasDetails.arcategoryuid',
+                            'foreignField' => '_id',
+                            'as' => 'categoryDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$categoryDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'tpasDetails.credittermuid',
+                            'foreignField' => '_id',
+                            'as' => 'crDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$crDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'organisations',
+                            'localField' => 'orguid',
+                            'foreignField' => '_id',
+                            'as' => 'orgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2763,7 +2854,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2773,6 +2864,7 @@ class MigrationValidationController extends Controller
                         '$count' => 'Total'
                     ]
                 ];
+            #no createddate
             case 'itembillinggroup':
                 return [
                     [
@@ -2847,12 +2939,40 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            'orderitemuid' => [ '$ne' => null ]
+                        ]
+                    ],
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
                         ]
                     ],
+                    /* [
+                        '$group' => [
+                            '_id' => [
+                                'tariffId' => '$_id',
+                                'orderitemuid' => '$orderitemuid',
+                                'chargecode' => '$chargecode',
+                                'billinggroupuid' => '$billinggroupuid',
+                                'billingsubgroupuid' => '$billingsubgroupuid'
+                            ],
+                            'orderItemName' => [ '$first' => '$orderDetails.name' ],
+                            'createdat' => [
+                                '$first' => '$orderDetails.createdat',
+                            ],
+                            'bguid' => [ '$first' => '$billinggroupuid' ],
+                            'bgCode' => [ '$first' => '$billingGrpDetails.code' ],
+                            'bgName' => [ '$first' => '$billingGrpDetails.description' ],
+                            'bsgCode' => [ '$first' => '$billingSubGrpDetails.code' ],
+                            'bsgName' => [ '$first' => '$billingSubGrpDetails.description' ],
+                            'orgcode' => [ '$first' => '$orgDetails.code' ],
+                            'orguid' => [ '$first' => '$orguid' ],
+                            'itmgrp' => [ '$first' => '$itemgroupDetails.valuedescription' ]
+                        ]
+                    ], */
                     [
                         '$count' => 'Total'
                     ]
@@ -2923,7 +3043,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -3023,7 +3143,133 @@ class MigrationValidationController extends Controller
                         '$count' => 'Total'
                     ]
                 ];
-            case 'patientchargecodes':
+            case 'tariff_master':
+                return [
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'bedcatuid',
+                            'foreignField' => '_id',
+                            'as' => 'bedDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$bedDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'billinggroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'bgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$bgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'billinggroups',
+                            'localField' => 'billingsubgroupuid',
+                            'foreignField' => '_id',
+                            'as' => 'bsgDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$bsgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'encountertypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'entypeDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$entypeDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'orderitems',
+                            'localField' => 'orderitemuid',
+                            'foreignField' => '_id',
+                            'as' => 'orderItemDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orderItemDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'ordersets',
+                            'localField' => 'ordersetuid',
+                            'foreignField' => '_id',
+                            'as' => 'orderSetDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orderSetDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => "organisations",
+                            'localField' => "orguid",
+                            'foreignField' => "_id",
+                            'as' => "orgDetails"
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$orgDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$lookup' => [
+                            'from' => 'referencevalues',
+                            'localField' => 'tarifftypeuid',
+                            'foreignField' => '_id',
+                            'as' => 'tariffDetails'
+                        ]
+                    ],
+                    [
+                        '$unwind' => [
+                            'path' => '$tariffDetails',
+                            'preserveNullAndEmptyArrays' => true
+                        ]
+                    ],
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
+                        ]
+                    ],
+                    [
+                        '$count' => 'Total'
+                    ]
+                ];
+                case 'patientchargecodes':
                 return [
                     [
                         '$match' => [
@@ -3323,9 +3569,10 @@ class MigrationValidationController extends Controller
                             'preserveNullAndEmptyArrays' => true
                         ]
                     ],
+                    
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
