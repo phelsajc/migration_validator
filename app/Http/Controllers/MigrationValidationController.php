@@ -14,6 +14,7 @@ class MigrationValidationController extends Controller
      * Table configurations for migration validation
      */
     private $migrationTables = [
+        #1
         'patients' => [
             'mongodb_collection' => 'patients',
             'mssql_table' => 'patients',
@@ -23,6 +24,7 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => 'mrn',
             'pipeline_type' => 'complex',
         ],
+        #2
         'careproviders' => [
             'mongodb_collection' => 'users',
             'mssql_table' => 'careprovider',
@@ -32,6 +34,7 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex',
         ],
+        #3
         'patientorderitems' => [
             'mongodb_collection' => 'patientorders',
             'mssql_table' => 'patientorderitems',
@@ -41,6 +44,7 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => 'patientorderitems._id',
             'pipeline_type' => 'complex'
         ],
+        #4
         'patientorders' => [
             'mongodb_collection' => 'patientorders',
             'mssql_table' => 'patientorders',
@@ -50,6 +54,7 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        #5
         'bedoccupancy' => [
             'mongodb_collection' => 'patientvisits',
             'mssql_table' => 'bedoccupancy',
@@ -59,6 +64,7 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => 'bedoccupancy._id',
             'pipeline_type' => 'complex'
         ],
+        //6
         'patientvisits' => [
             'mongodb_collection' => 'patientvisits',
             'mssql_table' => 'patientvisits',
@@ -68,6 +74,7 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        #7
         'payors' => [
             'mongodb_collection' => 'payors',
             'mssql_table' => 'payors',
@@ -77,6 +84,7 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        #8
         'dischargeprocesses' => [
             'mongodb_collection' => 'dischargeprocesses',
             'mssql_table' => 'dischargeprocesses',
@@ -86,6 +94,7 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        #9
         'patientbills' => [
             'mongodb_collection' => 'patientbills',
             'mssql_table' => 'patientbills',
@@ -146,7 +155,7 @@ class MigrationValidationController extends Controller
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
             'identifier_field' => 'careproviderdata_id',
-            'mongodb_identifier_field' => '_id',
+            'mongodb_identifier_field' => 'careproviderdata._id',
             'pipeline_type' => 'complex'
         ],
         'patientbills_paymentdetails' => [
@@ -353,7 +362,7 @@ class MigrationValidationController extends Controller
             'mssql_table' => 'patientbilldeductions',
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
-            'identifier_field' => '_id',
+            'identifier_field' => 'patientbilldeductions_id',
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
@@ -366,6 +375,7 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
+        #40
         'rad_exams' => [
             'mongodb_collection' => 'radiologyresults',
             'mssql_table' => 'examresult',
@@ -1586,7 +1596,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -1726,7 +1736,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -1763,14 +1773,14 @@ class MigrationValidationController extends Controller
                             'careproviderdata' => [
                                 '$ne' => null,
                             ],
-                            [
-                                '$match' => [
-                                    'modifiedat' => [
-                                        '$gte' => $startISODate,
-                                        '$lte' => $endISODate
-                                    ]
-                                ]
-                            ],
+                        ],
+                    ],
+                    [
+                        '$match' => [
+                            $config['date_field_mongo'] => [
+                                '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ]
                         ]
                     ],
                     [
@@ -1815,7 +1825,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -1893,7 +1903,7 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
-                            'modifiedat' => [
+                            $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ]
@@ -2961,18 +2971,37 @@ class MigrationValidationController extends Controller
                                 'billinggroupuid' => '$billinggroupuid',
                                 'billingsubgroupuid' => '$billingsubgroupuid'
                             ],
-                            'orderItemName' => [ '$first' => '$orderDetails.name' ],
+                            'orderItemName' => ['$first' => '$orderDetails.name'],
                             'createdat' => [
                                 '$first' => '$orderDetails.createdat',
                             ],
-                            'bguid' => [ '$first' => '$billinggroupuid' ],
-                            'bgCode' => [ '$first' => '$billingGrpDetails.code' ],
-                            'bgName' => [ '$first' => '$billingGrpDetails.description' ],
-                            'bsgCode' => [ '$first' => '$billingSubGrpDetails.code' ],
-                            'bsgName' => [ '$first' => '$billingSubGrpDetails.description' ],
-                            'orgcode' => [ '$first' => '$orgDetails.code' ],
-                            'orguid' => [ '$first' => '$orguid' ],
-                            'itmgrp' => [ '$first' => '$itemgroupDetails.valuedescription' ]
+                            'bguid' => ['$first' => '$billinggroupuid'],
+                            'bgCode' => ['$first' => '$billingGrpDetails.code'],
+                            'bgName' => ['$first' => '$billingGrpDetails.description'],
+                            'bsgCode' => ['$first' => '$billingSubGrpDetails.code'],
+                            'bsgName' => ['$first' => '$billingSubGrpDetails.description'],
+                            'orgcode' => ['$first' => '$orgDetails.code'],
+                            'orguid' => ['$first' => '$orguid'],
+                            'itmgrp' => ['$first' => '$itemgroupDetails.valuedescription']
+                        ]
+                    ],
+                    [
+                        '$project' => [
+                            '_id' => 0,
+                            'tariffId' => '$_id.tariffId',
+                            'orderitemuid' => '$_id.orderitemuid',
+                            'chargecode' => '$_id.chargecode',
+                            'billinggroupuid' => '$_id.billinggroupuid',
+                            'billingsubgroupuid' => '$_id.billingsubgroupuid',
+                            'orderItemName' => 1,
+                            'bgCode' => 1,
+                            'bgName' => 1,
+                            'bsgCode' => 1,
+                            'bsgName' => 1,
+                            'orgcode' => 1,
+                            'orguid' => 1,
+                            'createddate' => 1,
+                            'itmgrp' => 1
                         ]
                     ], */
                     [
