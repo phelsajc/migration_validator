@@ -42,10 +42,13 @@
 <body>
     <div class="container-fluid">
         <div class="row">
-            <div class="col-12">
-                <h1 class="mt-4 mb-4">
+            <div class="col-12 d-flex justify-content-between align-items-center mt-4 mb-4">
+                <h1 class="mb-0">
                     <i class="fas fa-database"></i> Migration Validation Dashboard
                 </h1>
+                <a href="{{ route('migration-validation.report') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-file-alt"></i> Migration Report
+                </a>
             </div>
         </div>
 
@@ -306,6 +309,11 @@
         }
 
         function loadHistory() {
+            const historyDiv = document.getElementById('validationHistory');
+            if (!historyDiv) {
+                return;
+            }
+
             fetch('/migration-validation/history')
             .then(response => response.json())
             .then(data => {
@@ -326,7 +334,7 @@
                 // Safe property access with fallbacks
                 const table = result.table || 'Unknown';
                 const mongodbCount = result.mongodb_count || 0;
-                const mssqlCount = result.missing_records_analysis.found_matches || null;//result.mssql_count || 0;
+                const mssqlCount = result.mssql_count || 0;
                 const difference = result.difference || 0;
                 const isComplete = result.is_complete || false;
                 const status = result.status || 'UNKNOWN';
@@ -580,9 +588,8 @@
             document.getElementById('startDate').value = yesterday.toISOString().split('T')[0];
             document.getElementById('endDate').value = yesterday.toISOString().split('T')[0];
             
-            // Load available tables and initial data
+            // Load available tables
             loadAvailableTables();
-            loadHistory();
         });
     </script>
 </body>

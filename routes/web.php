@@ -17,6 +17,7 @@ Route::get('/home', function () {
 // Migration Validation Routes (CSRF excluded)
 Route::prefix('migration-validation')->group(function () {
     Route::get('/', [MigrationValidationController::class, 'index'])->name('migration-validation.dashboard');
+    Route::get('/report', [MigrationValidationController::class, 'report'])->name('migration-validation.report');
     Route::get('/validate/patients', [MigrationValidationController::class, 'validatePatients'])->name('migration-validation.patients.get');
     Route::post('/validate/patients', [MigrationValidationController::class, 'validatePatients'])->name('migration-validation.patients');
     Route::get('/history', [MigrationValidationController::class, 'getValidationHistory'])->name('migration-validation.history');

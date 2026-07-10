@@ -394,6 +394,11 @@ class MigrationValidationController extends Controller
         return view('migration-validation.dashboard');
     }
 
+    public function report()
+    {
+        return view('migration-validation.report');
+    }
+
     /**
      * Get pipeline for specific table based on configuration
      */
@@ -3926,6 +3931,94 @@ class MigrationValidationController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'Validation failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function validateAllTables(Request $request)
+    {
+        try {
+            set_time_limit(0);
+
+            $startDateInput = $request->input('start_date', $request->query('start_date', now()->format('Y-m-d')));
+            $endDateInput = $request->input('end_date', $request->query('end_date', now()->format('Y-m-d')));
+
+            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
+            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
+
+            $validations = [];
+            $completeCount = 0;
+            $incompleteCount = 0;
+            $errorCount = 0;
+
+            foreach ($this->migrationTables as $tableName => $config) {
+                try {
+                    $mongodbCount = $this->getMongoDBCount($startDate, $endDate, $tableName);
+                    $mssqlCount = $this->getMSSQLCount($startDate, $endDate, $tableName);
+                    $difference = $mongodbCount - $mssqlCount;
+                    $isComplete = $difference === 0;
+
+                    if ($isComplete) {
+                        $completeCount++;
+                    } else {
+                        $incompleteCount++;
+                    }
+
+                    $validations[] = [
+                        'table' => $tableName,
+                        'mongodb_collection' => $config['mongodb_collection'],
+                        'mssql_table' => $config['mssql_table'],
+                        'mongodb_count' => $mongodbCount,
+                        'mssql_count' => $mssqlCount,
+                        'difference' => $difference,
+                        'is_complete' => $isComplete,
+                        'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
+                        'error' => null,
+                    ];
+                } catch (Exception $e) {
+                    $errorCount++;
+                    Log::error('Migration validation error for table', [
+                        'table' => $tableName,
+                        'error' => $e->getMessage(),
+                    ]);
+
+                    $validations[] = [
+                        'table' => $tableName,
+                        'mongodb_collection' => $config['mongodb_collection'],
+                        'mssql_table' => $config['mssql_table'],
+                        'mongodb_count' => null,
+                        'mssql_count' => null,
+                        'difference' => null,
+                        'is_complete' => false,
+                        'status' => 'ERROR',
+                        'error' => $e->getMessage(),
+                    ];
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'validations' => $validations,
+                    'summary' => [
+                        'total_tables' => count($this->migrationTables),
+                        'complete_tables' => $completeCount,
+                        'incomplete_tables' => $incompleteCount,
+                        'error_tables' => $errorCount,
+                    ],
+                    'start_date' => $startDate,
+                    'end_date' => $endDate,
+                    'validated_at' => now()->toISOString(),
+                ],
+            ]);
+        } catch (Exception $e) {
+            Log::error('Migration validation report error', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Report generation failed: ' . $e->getMessage(),
             ], 500);
         }
     }
