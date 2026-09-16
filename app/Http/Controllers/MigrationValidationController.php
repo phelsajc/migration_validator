@@ -339,15 +339,15 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
-        'patientchargecodes' => [
+        /* 'patientchargecodes' => [
             'mongodb_collection' => 'patientchargecodes',
             'mssql_table' => 'patientchargecodes',
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
-            'identifier_field' => 'chargecodes_id',
+            'identifier_field' => ['chargecodes_id', 'patientvisituid', 'patientorderuid', 'patientorderitemuid', 'org_id'],
             'mongodb_identifier_field' => 'chargecodes._id',
             'pipeline_type' => 'complex'
-        ],
+        ], */
         'stockdispenses' => [
             'mongodb_collection' => 'stockdispenses',
             'mssql_table' => 'stockdispenses',
@@ -366,7 +366,7 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
-        'lab_exams' => [
+        /* 'lab_exams' => [
             'mongodb_collection' => 'labresults',
             'mssql_table' => 'examresult',
             'date_field_mongo' => 'createdat',
@@ -374,9 +374,9 @@ class MigrationValidationController extends Controller
             'identifier_field' => 'examresult_id',
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
-        ],
+        ], */
         #40
-        'rad_exams' => [
+        /* 'rad_exams' => [
             'mongodb_collection' => 'radiologyresults',
             'mssql_table' => 'examresult',
             'date_field_mongo' => 'createdat',
@@ -384,7 +384,7 @@ class MigrationValidationController extends Controller
             'identifier_field' => 'examresult_id',
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
-        ],//43
+        ], *///43
     ];
     /**
      * Display the migration validation dashboard
@@ -4252,23 +4252,32 @@ class MigrationValidationController extends Controller
                 ->select("SELECT COUNT(*) as total FROM {$config['mssql_table']} WHERE {$config['date_field_mssql']} >= '$startDateTime' AND {$config['date_field_mssql']} <= '$endDateTime'");
              */
 
-            $result1 = DB::connection('sqlsrv')
-                ->select("SELECT COUNT(*) as total FROM {$config['mssql_table']} WHERE (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEn '$startDateTime' AND '$endDateTime'");
-            $result2 = DB::connection('sqlsrv')
-                ->select("
-                    SELECT COUNT(DISTINCT {$config['identifier_field']}) AS total
-                    FROM {$config['mssql_table']}
-                    WHERE 
-                        (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
-                         AT TIME ZONE 'Singapore Standard Time')
-                        BETWEEN '$startDateTime' AND '$endDateTime'
-                ");
+            $identifierFields = $this->normalizeIdentifierFields($config);
+            $distinctCols = implode(', ', $identifierFields);
+            $isComposite = count($identifierFields) > 1;
+
+            // #region agent log
+            file_put_contents(base_path('debug-dc7bab.log'), json_encode(['sessionId'=>'dc7bab','hypothesisId'=>'A','location'=>'MigrationValidationController.php:getMSSQLCount','message'=>'identifier config','data'=>['table'=>$tableName,'identifierFields'=>$identifierFields,'isComposite'=>$isComposite,'distinctCols'=>$distinctCols],'timestamp'=>round(microtime(true)*1000)])."\n", FILE_APPEND);
+            // #endregion
+
+            // SQL Server only supports COUNT(DISTINCT single_column); use subquery for composite keys
+            if (!$isComposite) {
+                $result2 = DB::connection('sqlsrv')
+                    ->select("
+                        SELECT COUNT(DISTINCT {$distinctCols}) AS total
+                        FROM {$config['mssql_table']}
+                        WHERE 
+                            (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
+                             AT TIME ZONE 'Singapore Standard Time')
+                            BETWEEN '$startDateTime' AND '$endDateTime'
+                    ");
+            }
 
             $result = DB::connection('sqlsrv')
                 ->select("
                     SELECT COUNT(*) AS total
                     FROM (
-                        SELECT DISTINCT {$config['identifier_field']}
+                        SELECT DISTINCT {$distinctCols}
                         FROM {$config['mssql_table']}
                         WHERE 
                             (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
@@ -4277,6 +4286,9 @@ class MigrationValidationController extends Controller
                     ) AS sub
                 ");
 
+            // #region agent log
+            file_put_contents(base_path('debug-dc7bab.log'), json_encode(['sessionId'=>'dc7bab','hypothesisId'=>'B','location'=>'MigrationValidationController.php:getMSSQLCount','message'=>'count result','data'=>['table'=>$tableName,'total'=>$result[0]->total??0,'usedSubquery'=>true,'skippedCountDistinct'=>$isComposite],'timestamp'=>round(microtime(true)*1000)])."\n", FILE_APPEND);
+            // #endregion
 
             return $result[0]->total ?? 0;
 
@@ -4366,7 +4378,7 @@ class MigrationValidationController extends Controller
                         'date_field' => $config['date_field_mongo'],
                         'date_value' => $record[$config['date_field_mongo']]->toDateTime()->format('Y-m-d H:i:s'),
                         'date_iso' => $record[$config['date_field_mongo']]->toDateTime()->toISOString(),
-                        'identifier' => $record[$config['identifier_field']] ?? 'N/A'
+                        'identifier' => $this->getMongoField($record, $config['mongodb_identifier_field']) ?? 'N/A'
                     ];
                 }
             }
@@ -4495,9 +4507,13 @@ class MigrationValidationController extends Controller
                 });
 
             // Get all MSSQL records for the date range
+            $identifierFields = $this->normalizeIdentifierFields($config);
+            $selectCols = implode(', ', array_merge($identifierFields, [$config['date_field_mssql']]));
+            $lookupField = $this->getMssqlIdentifierLookupField($config);
+
             $mssqlRecords = DB::connection('sqlsrv')
                 ->select("
-                SELECT DISTINCT {$config['identifier_field']}, {$config['date_field_mssql']}
+                SELECT DISTINCT {$selectCols}
                 FROM {$config['mssql_table']}
                 WHERE 
                     (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
@@ -4508,10 +4524,9 @@ class MigrationValidationController extends Controller
 
 
             // Create a lookup map of MSSQL identifier values for efficient matching
-            $identifierField = $config['identifier_field'];
             $mssqlIdentifierMap = [];
             foreach ($mssqlRecords as $mssqlRecord) {
-                $mssqlId = $mssqlRecord->{$identifierField} ?? null;
+                $mssqlId = $mssqlRecord->{$lookupField} ?? null;
                 if ($mssqlId !== null) {
                     // Convert to string for consistent comparison
                     $mssqlIdentifierMap[(string) $mssqlId] = $mssqlRecord;
@@ -4603,6 +4618,18 @@ class MigrationValidationController extends Controller
             ]);
             return null;
         }
+    }
+
+    private function normalizeIdentifierFields(array $config): array
+    {
+        $fields = $config['identifier_field'];
+        return is_array($fields) ? $fields : [$fields];
+    }
+
+    private function getMssqlIdentifierLookupField(array $config): string
+    {
+        $fields = $this->normalizeIdentifierFields($config);
+        return end($fields);
     }
 
     function getMongoField($record, $path)
