@@ -324,6 +324,7 @@
         function displayTableDetail(result) {
             const analysis = result.missing_records_analysis || {};
             const missingRecords = analysis.missing_records || [];
+            const extraRecords = analysis.extra_records || [];
             const mongodbCount = result.mongodb_count || 0;
             const mssqlCount = result.mssql_count || 0;
             const difference = result.difference || 0;
@@ -341,14 +342,15 @@
                 <div class="row mb-3">
                     <div class="col-md-3"><strong>Found Matches:</strong> ${Number(analysis.found_matches || 0).toLocaleString()}</div>
                     <div class="col-md-3"><strong>Missing from MSSQL:</strong> ${Number(analysis.missing_from_mssql || 0).toLocaleString()}</div>
-                    <div class="col-md-6"><strong>Validated At:</strong> ${new Date(result.validated_at).toLocaleString()}</div>
+                    <div class="col-md-3"><strong>Extra in MSSQL:</strong> ${Number(analysis.extra_in_mssql || 0).toLocaleString()}</div>
+                    <div class="col-md-3"><strong>Validated At:</strong> ${new Date(result.validated_at).toLocaleString()}</div>
                 </div>
             `;
 
             if (missingRecords.length > 0) {
                 html += `
                     <hr>
-                    <h6>Missing Records (${missingRecords.length} shown)</h6>
+                    <h6>Missing from MSSQL (${missingRecords.length} shown)</h6>
                     <div class="table-responsive">
                         <table class="table table-striped table-hover table-sm">
                             <thead class="table-dark">
@@ -374,10 +376,43 @@
                 });
 
                 html += '</tbody></table></div>';
-            } else if (!result.is_complete) {
-                html += '<div class="alert alert-warning mt-3">Count mismatch detected but no missing record details were returned.</div>';
-            } else {
-                html += '<div class="alert alert-success mt-3">Migration is complete for this table in the selected date range.</div>';
+            }
+
+            if (extraRecords.length > 0) {
+                html += `
+                    <hr>
+                    <h6>Extra in MSSQL / not in MongoDB (${extraRecords.length} shown)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover table-sm">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Identifier</th>
+                                    <th>MSSQL Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                extraRecords.forEach((record, index) => {
+                    html += `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td><code>${escapeHtml(record.universal_id || 'N/A')}</code></td>
+                            <td>${escapeHtml(record.mssql_date || 'N/A')}</td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table></div>';
+            }
+
+            if (missingRecords.length === 0 && extraRecords.length === 0) {
+                if (!result.is_complete) {
+                    html += '<div class="alert alert-warning mt-3">Count mismatch detected but no missing/extra record details were returned.</div>';
+                } else {
+                    html += '<div class="alert alert-success mt-3">Migration is complete for this table in the selected date range.</div>';
+                }
             }
 
             document.getElementById('detailContent').innerHTML = html;

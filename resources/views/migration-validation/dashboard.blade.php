@@ -371,12 +371,19 @@
                                 <strong>Validated At:</strong> ${new Date(validatedAt).toLocaleString()}
                             </div>
                         </div>
-                        ${missingRecordsAnalysis && missingRecordsAnalysis.missing_records && missingRecordsAnalysis.missing_records.length > 0 ? `
+                        ${missingRecordsAnalysis && ((missingRecordsAnalysis.missing_records && missingRecordsAnalysis.missing_records.length > 0) || (missingRecordsAnalysis.extra_records && missingRecordsAnalysis.extra_records.length > 0)) ? `
                             <div class="row mt-3">
                                 <div class="col-12">
-                                    <button class="btn btn-warning btn-sm" onclick="showMissingRecords('${table}')">
-                                        <i class="fas fa-exclamation-triangle"></i> View ${missingRecordsAnalysis.missing_records.length} Missing Records
-                                    </button>
+                                    ${missingRecordsAnalysis.missing_records && missingRecordsAnalysis.missing_records.length > 0 ? `
+                                        <button class="btn btn-warning btn-sm me-2" onclick="showMissingRecords('${table}')">
+                                            <i class="fas fa-exclamation-triangle"></i> View ${missingRecordsAnalysis.missing_records.length} Missing from MSSQL
+                                        </button>
+                                    ` : ''}
+                                    ${missingRecordsAnalysis.extra_records && missingRecordsAnalysis.extra_records.length > 0 ? `
+                                        <button class="btn btn-info btn-sm" onclick="showExtraRecords('${table}')">
+                                            <i class="fas fa-database"></i> View ${missingRecordsAnalysis.extra_records.length} Extra in MSSQL
+                                        </button>
+                                    ` : ''}
                                 </div>
                             </div>
                         ` : ''}
@@ -517,17 +524,18 @@
                             <strong>Found Matches:</strong> ${analysis.found_matches || 0}
                         </div>
                         <div class="col-md-3">
-                            <strong>Missing Records:</strong> 
+                            <strong>Missing from MSSQL:</strong> 
                             <span class="text-danger">${missingRecords.length}</span>
                         </div>
                     </div>
                     <hr>
-                    <h6>Missing Records Details:</h6>
+                    <h6>MongoDB records not found in MSSQL:</h6>
                     <div class="table-responsive">
                         <table class="table table-striped table-hover">
                             <thead class="table-dark">
                                 <tr>
-                                    <th>MongoDB ID</th>
+                                    <th>#</th>
+                                    <th>Identifier</th>
                                     <th>Created Date</th>
                                     <th>Modified Date</th>
                                 </tr>
@@ -536,10 +544,10 @@
                 `;
                 let a = 1;
                 missingRecords.forEach(record => {
-                    const patientData = record.patient_data || {};
                     html += `
                         <tr>
-                            <td><code>${a} ${record.universal_id || 'N/A'}</code></td>
+                            <td>${a}</td>
+                            <td><code>${record.universal_id || 'N/A'}</code></td>
                             <td>${record.mongo_createdat || 'N/A'}</td>
                             <td>${record.modifiedat || 'N/A'}</td>
                         </tr>
@@ -559,6 +567,71 @@
                 missingRecordsContent.innerHTML = `
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i> No missing records data available.
+                    </div>
+                `;
+                missingRecordsSection.style.display = 'block';
+            }
+        }
+
+        function showExtraRecords(tableName) {
+            const missingRecordsSection = document.getElementById('missingRecordsSection');
+            const missingRecordsContent = document.getElementById('missingRecordsContent');
+            const analysis = window.currentMissingRecords || {};
+            const extraRecords = analysis.extra_records || [];
+
+            if (extraRecords.length > 0) {
+                let html = `
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <strong>MongoDB Total:</strong> ${analysis.mongo_total || 0}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>MSSQL Total:</strong> ${analysis.mssql_total || 0}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Found Matches:</strong> ${analysis.found_matches || 0}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Extra in MSSQL:</strong>
+                            <span class="text-danger">${extraRecords.length}</span>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6>MSSQL records not found in MongoDB:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Identifier</th>
+                                    <th>MSSQL Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                extraRecords.forEach((record, index) => {
+                    html += `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td><code>${record.universal_id || 'N/A'}</code></td>
+                            <td>${record.mssql_date || 'N/A'}</td>
+                        </tr>
+                    `;
+                });
+
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                missingRecordsContent.innerHTML = html;
+                missingRecordsSection.style.display = 'block';
+            } else {
+                missingRecordsContent.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No extra MSSQL records data available.
                     </div>
                 `;
                 missingRecordsSection.style.display = 'block';

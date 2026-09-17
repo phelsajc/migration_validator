@@ -4567,6 +4567,7 @@ class MigrationValidationController extends Controller
             $mongoTotal = 0;
             $firstRecord = null;
             $mongoDateField = $config['date_field_mongo'] ?? 'createdat';
+            $mongoIdentifierSet = [];
             // Process MongoDB records one at a time using cursor (prevents memory exhaustion)
             foreach ($mongoCursor as $mongoRecord) {
                 $mongoTotal++;
@@ -4603,6 +4604,10 @@ class MigrationValidationController extends Controller
                         // Convert MongoDB ObjectId to string if needed
                         $mongoIdString = (string) $mongoIdTest;
 
+                        if ($mongoIdString !== '' && $mongoIdString !== 'null') {
+                            $mongoIdentifierSet[$mongoIdString] = true;
+                        }
+
                         // Use in-memory map lookup instead of database query (produces same results, much faster)
                         if (isset($mssqlIdentifierMap[$mongoIdString])) {
                             $mssqlRecord = $mssqlIdentifierMap[$mongoIdString];
@@ -4630,12 +4635,27 @@ class MigrationValidationController extends Controller
                 }
             }
 
+            // MSSQL records with no matching MongoDB identifier in the same window
+            $extraRecords = [];
+            $mssqlDateField = $config['date_field_mssql'];
+            foreach ($mssqlIdentifierMap as $id => $mssqlRecord) {
+                if (!isset($mongoIdentifierSet[$id])) {
+                    $extraRecords[] = [
+                        'universal_id' => $id,
+                        'mssql_date' => $mssqlRecord->{$mssqlDateField} ?? null,
+                        'mongo_check_result' => 'Not found in MongoDB',
+                    ];
+                }
+            }
+
             return [
                 'mongo_total' => $mongoTotal, // Count as we process instead of count($mongoRecords)
                 'mssql_total' => count($mssqlRecords),
                 'found_matches' => $foundMatches,
                 'missing_from_mssql' => count($missingRecords),
                 'missing_records' => $missingRecords,
+                'extra_in_mssql' => count($extraRecords),
+                'extra_records' => $extraRecords,
             ];
 
         } catch (Exception $e) {
