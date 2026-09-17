@@ -399,6 +399,27 @@ class MigrationValidationController extends Controller
         return view('migration-validation.report');
     }
 
+    private function parsePickerDate(string $date, string $tz = 'Asia/Manila'): Carbon
+    {
+        $date = trim($date);
+
+        // ISO from date picker: 2026-09-16T00:00:00.000000Z
+        // Take the calendar date the user picked, interpret as PHT day.
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})T/', $date, $m)) {
+            return Carbon::createFromFormat('Y-m-d', $m[1], $tz)->startOfDay();
+        }
+
+        if (preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $date)) {
+            return Carbon::createFromFormat('d/m/Y', $date, $tz)->startOfDay();
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            return Carbon::createFromFormat('Y-m-d', $date, $tz)->startOfDay();
+        }
+
+        throw new \InvalidArgumentException("Unsupported date format: {$date}");
+    }
+
     /**
      * Get pipeline for specific table based on configuration
      */
@@ -409,8 +430,26 @@ class MigrationValidationController extends Controller
         }
 
         $config = $this->migrationTables[$tableName];
-        $startISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000);
-        $endISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000);
+        /* $startISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000);
+        $endISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000); */
+
+        $tz = 'Asia/Manila';
+        //$start = Carbon::parse($startDate, $tz)->startOfDay();
+        //$end = Carbon::parse($endDate, $tz)->startOfDay()->addDay();
+
+        // Matches date picker display: 16/09/2026
+        //$start = Carbon::createFromFormat('d/m/Y', $startDate, $tz)->startOfDay();
+        //$end = Carbon::createFromFormat('d/m/Y', $endDate, $tz)->startOfDay()->addDay();
+        // If the request actually sends Y-m-d (e.g. 2026-09-16), use this instead:
+        /* $start = Carbon::createFromFormat('Y-m-d', $startDate, $tz)->startOfDay();
+        $end = Carbon::createFromFormat('Y-m-d', $endDate, $tz)->startOfDay()->addDay(); */
+
+        $start = $this->parsePickerDate($startDate, $tz);
+        $end = $this->parsePickerDate($endDate, $tz)->addDay();
+        $startISODate = new \MongoDB\BSON\UTCDateTime($start->timestamp * 1000);
+        $endISODate = new \MongoDB\BSON\UTCDateTime($end->timestamp * 1000);
+
+        //echo $startISODate . ' <br> ' . $endISODate . ' <br> ';
 
         switch ($tableName) {
             case 'patients':
@@ -458,6 +497,9 @@ class MigrationValidationController extends Controller
                         '$match' => [
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ],
+                            'modifiedat' => [
                                 '$lte' => $endISODate
                             ]
                         ]
@@ -520,6 +562,9 @@ class MigrationValidationController extends Controller
                             'iscareprovider' => true,
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ],
+                            'modifiedat' => [
                                 '$lte' => $endISODate
                             ]
                         ]
@@ -688,6 +733,9 @@ class MigrationValidationController extends Controller
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ],
+                            'modifiedat' => [
+                                '$lte' => $endISODate
+                            ]
                         ]
                     ],
                     [
@@ -3885,6 +3933,7 @@ class MigrationValidationController extends Controller
 
             // Get MSSQL count
             $mssqlCount = $this->getMSSQLCount($startDate, $endDate, $tableName);
+            //echo $mssqlCount;
             //dd($startDate, $endDate, $tableName, $mongodbCount, $mssqlCount, $mongodbCount - $mssqlCount);
             // Log the counts for debugging
             Log::info('Validation counts', [
@@ -4243,9 +4292,14 @@ class MigrationValidationController extends Controller
         try {
             $config = $this->migrationTables[$tableName];
 
-            // Convert to UTC timezone to match migration filter
-            $startDateTime = Carbon::parse($startDate)->utc()->format('Y-m-d H:i:s');
-            $endDateTime = Carbon::parse($endDate)->utc()->format('Y-m-d H:i:s');
+            $tz = 'Asia/Manila';
+            // One picker value only
+            $start = Carbon::parse($startDate)->timezone($tz)->startOfDay()->utc();
+            $end = $start->copy()->addDay(); // next midnight PHT, in UTC
+            $startDateTime = $start->format('Y-m-d 16:00:00'); // 2026-09-15 16:00:00
+            $endDateTime = $end->format('Y-m-d 15:59:59');   // 2026-09-16 16:00:00
+
+            //return $startDateTime . ' AND ' . $endDateTime;
 
             // Execute the SQL query - match the migration filter exactly
             /* $result = DB::connection('sqlsrv')
@@ -4256,41 +4310,15 @@ class MigrationValidationController extends Controller
             $distinctCols = implode(', ', $identifierFields);
             $isComposite = count($identifierFields) > 1;
 
-            // #region agent log
-            file_put_contents(base_path('debug-dc7bab.log'), json_encode(['sessionId'=>'dc7bab','hypothesisId'=>'A','location'=>'MigrationValidationController.php:getMSSQLCount','message'=>'identifier config','data'=>['table'=>$tableName,'identifierFields'=>$identifierFields,'isComposite'=>$isComposite,'distinctCols'=>$distinctCols],'timestamp'=>round(microtime(true)*1000)])."\n", FILE_APPEND);
-            // #endregion
+            return DB::connection('sqlsrv')
+                ->table($tableName)
+                ->whereRaw(
+                    //'CONVERT(datetime, createddate) >= ? AND CONVERT(datetime, createddate) < ?',
+                    "CONVERT(datetime, {$config['date_field_mssql']}) >= ? AND CONVERT(datetime, {$config['date_field_mssql']}) < ?",
+                    [$startDateTime, $endDateTime]
+                )
+                ->count();
 
-            // SQL Server only supports COUNT(DISTINCT single_column); use subquery for composite keys
-            if (!$isComposite) {
-                $result2 = DB::connection('sqlsrv')
-                    ->select("
-                        SELECT COUNT(DISTINCT {$distinctCols}) AS total
-                        FROM {$config['mssql_table']}
-                        WHERE 
-                            (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
-                             AT TIME ZONE 'Singapore Standard Time')
-                            BETWEEN '$startDateTime' AND '$endDateTime'
-                    ");
-            }
-
-            $result = DB::connection('sqlsrv')
-                ->select("
-                    SELECT COUNT(*) AS total
-                    FROM (
-                        SELECT DISTINCT {$distinctCols}
-                        FROM {$config['mssql_table']}
-                        WHERE 
-                            (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
-                            AT TIME ZONE 'Singapore Standard Time')
-                            BETWEEN '$startDateTime' AND '$endDateTime'
-                    ) AS sub
-                ");
-
-            // #region agent log
-            file_put_contents(base_path('debug-dc7bab.log'), json_encode(['sessionId'=>'dc7bab','hypothesisId'=>'B','location'=>'MigrationValidationController.php:getMSSQLCount','message'=>'count result','data'=>['table'=>$tableName,'total'=>$result[0]->total??0,'usedSubquery'=>true,'skippedCountDistinct'=>$isComposite],'timestamp'=>round(microtime(true)*1000)])."\n", FILE_APPEND);
-            // #endregion
-
-            return $result[0]->total ?? 0;
 
         } catch (Exception $e) {
             Log::error('MSSQL count error', [
