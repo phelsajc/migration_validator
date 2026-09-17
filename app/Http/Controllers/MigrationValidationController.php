@@ -4502,11 +4502,13 @@ class MigrationValidationController extends Controller
             set_time_limit(600); // 10 minutes
 
             $config = $this->migrationTables[$tableName];
-            $startDateInput = Carbon::parse($startDate)->format('Y-m-d');
-            $endDateInput = Carbon::parse($endDate)->format('Y-m-d');
 
-            $startDateTime = Carbon::parse($startDateInput)->startOfDay()->format('Y-m-d H:i:s');
-            $endDateTime = Carbon::parse($endDateInput)->endOfDay()->format('Y-m-d H:i:s');
+            // Same Manila-day window as getMSSQLCount / Mongo pipeline
+            $tz = 'Asia/Manila';
+            $start = $this->parsePickerDate($startDate, $tz)->utc();
+            $end = $this->parsePickerDate($endDate, $tz)->addDay()->utc();
+            $startDateTime = $start->format('Y-m-d H:i:s');
+            $endDateTime = $end->format('Y-m-d H:i:s');
 
             // Get pipeline from getPipelineForTable and modify it to return records instead of count
             $pipeline = $this->getPipelineForTable($tableName, $startDate, $endDate);
@@ -4534,22 +4536,20 @@ class MigrationValidationController extends Controller
                     ]);
                 });
 
-            // Get all MSSQL records for the date range
+            // Get all MSSQL records for the same CONVERT window as getMSSQLCount
             $identifierFields = $this->normalizeIdentifierFields($config);
-            $selectCols = implode(', ', array_merge($identifierFields, [$config['date_field_mssql']]));
             $lookupField = $this->getMssqlIdentifierLookupField($config);
+            $selectCols = array_values(array_unique(array_merge($identifierFields, [$config['date_field_mssql']])));
 
             $mssqlRecords = DB::connection('sqlsrv')
-                ->select("
-                SELECT DISTINCT {$selectCols}
-                FROM {$config['mssql_table']}
-                WHERE 
-                    (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) 
-                     AT TIME ZONE 'UTC' AT TIME ZONE 'Singapore Standard Time')
-                    BETWEEN '$startDate' AND '$endDate'
-            ");
-            //dd($mssqlRecords);
-
+                ->table($config['mssql_table'])
+                ->select($selectCols)
+                ->distinct()
+                ->whereRaw(
+                    "CONVERT(datetime, {$config['date_field_mssql']}) >= ? AND CONVERT(datetime, {$config['date_field_mssql']}) < ?",
+                    [$startDateTime, $endDateTime]
+                )
+                ->get();
 
             // Create a lookup map of MSSQL identifier values for efficient matching
             $mssqlIdentifierMap = [];
@@ -4566,6 +4566,7 @@ class MigrationValidationController extends Controller
             $foundMatches = 0;
             $mongoTotal = 0;
             $firstRecord = null;
+            $mongoDateField = $config['date_field_mongo'] ?? 'createdat';
             // Process MongoDB records one at a time using cursor (prevents memory exhaustion)
             foreach ($mongoCursor as $mongoRecord) {
                 $mongoTotal++;
@@ -4577,20 +4578,30 @@ class MigrationValidationController extends Controller
 
                 // Get identifier field value (same logic as original)
                 $mongoIdTest = $this->getMongoField($mongoRecord, $config['mongodb_identifier_field']);
-                //dd($mongoIdTest);
 
                 $mongoId = $mongoRecord['_id'] ?? null;
-                $mongoDate = Carbon::parse($mongoRecord['createdat']->toDateTime())->format('Y-m-d H:i:s');
+                $mongoDateValue = $this->getMongoField($mongoRecord, $mongoDateField);
+                $mongoDate = $mongoDateValue
+                    ? Carbon::parse($mongoDateValue->toDateTime())->format('Y-m-d H:i:s')
+                    : 'N/A';
+                $mongoDateOriginal = $mongoDateValue
+                    ? $mongoDateValue->toDateTime()->format('Y-m-d H:i:s.u')
+                    : 'N/A';
+                $modifiedAtValue = $mongoRecord['modifiedat'] ?? null;
+                $modifiedAt = $modifiedAtValue
+                    ? $modifiedAtValue->toDateTime()->format('Y-m-d H:i:s')
+                    : 'N/A';
 
                 // Check if this MongoDB record exists in MSSQL by ID
                 // Use pre-loaded map for fast in-memory lookup (same results, much faster than database queries)
                 $hasMatch = false;
                 $mssqlRecord = null;
+                $mongoIdString = null;
 
                 if ($mongoId) {
                     try {
                         // Convert MongoDB ObjectId to string if needed
-                        $mongoIdString = (string) $mongoIdTest;//$mongoRecord[$config['mongodb_identifier_field']];// (string) $mongoRecord[$config['mongodb_identifier_field']];//is_object($mongoId) ? (string)$mongoId : $mongoId;
+                        $mongoIdString = (string) $mongoIdTest;
 
                         // Use in-memory map lookup instead of database query (produces same results, much faster)
                         if (isset($mssqlIdentifierMap[$mongoIdString])) {
@@ -4607,25 +4618,14 @@ class MigrationValidationController extends Controller
                 }
 
                 if (!$hasMatch) {
-                    //dd($mongoRecord);
                     $missingRecords[] = [
-                        'mongo_id' => $mongoRecord['_id'],//?? 'N/A',
+                        'mongo_id' => $mongoRecord['_id'],
                         'mongo_id2' => (string) $mongoRecord['_id'],
                         'mongo_createdat' => $mongoDate,
                         'universal_id' => $mongoIdString != null ? $mongoIdString : (string) $mongoRecord['_id'],
-                        'modifiedat' => $mongoRecord['modifiedat']->toDateTime()->format('Y-m-d H:i:s'),
-                        'mongo_createdat_original' => $mongoRecord['createdat']->toDateTime()->format('Y-m-d H:i:s.u'),
+                        'modifiedat' => $modifiedAt,
+                        'mongo_createdat_original' => $mongoDateOriginal,
                         'mssql_check_result' => $mssqlRecord ? 'Found but no match' : 'Not found in MSSQL',
-                        /* 'patient_data' => [
-                            'mrn' => $mongoRecord['mrn'] ?? 'N/A',
-                            'id' => $mongoRecord['patient_id'] ?? $mongoRecord['id'] ?? 'N/A',
-                            '_id' => $mongoRecord['_id'] ?? $mongoRecord['id'] ?? 'N/A',
-                            'bedoccupancy_id' => $mongoRecord['bedoccupancy']['_id'] ?? $mongoRecord['id'] ?? 'N/A',
-                            'firstname' => $mongoRecord['firstname'] ?? 'N/A',
-                            'lastname' => $mongoRecord['lastname'] ?? 'N/A',
-                            'email' => $mongoRecord['email'] ?? 'N/A',
-                            'phone' => $mongoRecord['phone'] ?? 'N/A'
-                        ] */
                     ];
                 }
             }
@@ -4636,7 +4636,6 @@ class MigrationValidationController extends Controller
                 'found_matches' => $foundMatches,
                 'missing_from_mssql' => count($missingRecords),
                 'missing_records' => $missingRecords,
-                //"sql" => "SELECT {$config['date_field_mssql']} FROM {$config['mssql_table']} WHERE (TRY_CONVERT(datetimeoffset, {$config['date_field_mssql']}, 127) AT TIME ZONE 'Singapore Standard Time') BETWEEN '$startDateTime' AND '$endDateTime'"
             ];
 
         } catch (Exception $e) {
