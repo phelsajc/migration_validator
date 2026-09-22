@@ -371,19 +371,13 @@
                                 <strong>Validated At:</strong> ${new Date(validatedAt).toLocaleString()}
                             </div>
                         </div>
-                        ${missingRecordsAnalysis && ((missingRecordsAnalysis.missing_records && missingRecordsAnalysis.missing_records.length > 0) || (missingRecordsAnalysis.extra_records && missingRecordsAnalysis.extra_records.length > 0)) ? `
+                        ${missingRecordsAnalysis && missingRecordsAnalysis.missing_records && missingRecordsAnalysis.missing_records.length > 0 ? `
                             <div class="row mt-3">
                                 <div class="col-12">
-                                    ${missingRecordsAnalysis.missing_records && missingRecordsAnalysis.missing_records.length > 0 ? `
-                                        <button class="btn btn-warning btn-sm me-2" onclick="showMissingRecords('${table}')">
-                                            <i class="fas fa-exclamation-triangle"></i> View ${missingRecordsAnalysis.missing_records.length} Missing from MSSQL
-                                        </button>
-                                    ` : ''}
-                                    ${missingRecordsAnalysis.extra_records && missingRecordsAnalysis.extra_records.length > 0 ? `
-                                        <button class="btn btn-info btn-sm" onclick="showExtraRecords('${table}')">
-                                            <i class="fas fa-database"></i> View ${missingRecordsAnalysis.extra_records.length} Extra in MSSQL
-                                        </button>
-                                    ` : ''}
+                                    <button class="btn btn-warning btn-sm me-2" onclick="showMissingRecords('${table}')">
+                                        <i class="fas fa-exclamation-triangle"></i> View ${missingRecordsAnalysis.missing_records.length} Missing from MSSQL
+                                    </button>
+                                    <!-- Temporarily hidden: Extra in MSSQL button -->
                                 </div>
                             </div>
                         ` : ''}
@@ -653,13 +647,19 @@
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
-            // Set default dates
+            // Set default dates to yesterday; block today and future dates
             const today = new Date();
             const yesterday = new Date(today);
             yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
             
-            document.getElementById('startDate').value = yesterday.toISOString().split('T')[0];
-            document.getElementById('endDate').value = yesterday.toISOString().split('T')[0];
+            const startDateInput = document.getElementById('startDate');
+            const endDateInput = document.getElementById('endDate');
+            
+            startDateInput.max = yesterdayStr;
+            endDateInput.max = yesterdayStr;
+            startDateInput.value = yesterdayStr;
+            endDateInput.value = yesterdayStr;
             
             // Load available tables
             loadAvailableTables();
