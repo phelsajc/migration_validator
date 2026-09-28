@@ -732,6 +732,13 @@
                             </tbody>
                         </table>
                     </div>
+                    <div class="mt-3">
+                        <button class="btn btn-primary btn-sm" id="checkExtraBtn" onclick="checkExtraInMongo('${tableName}')">
+                            <i class="fas fa-search"></i> Check all ${extraRecords.length.toLocaleString()} in MongoDB
+                        </button>
+                        <small class="text-muted ms-2">One lookup for every identifier. This does not run validation again.</small>
+                    </div>
+                    <div id="extraMongoCheck" class="mt-3"></div>
                 `;
 
                 missingRecordsContent.innerHTML = html;
@@ -744,6 +751,123 @@
                 `;
                 missingRecordsSection.style.display = 'block';
             }
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function checkExtraInMongo(tableName) {
+            const analysis = window.currentMissingRecords || {};
+            const extraRecords = analysis.extra_records || [];
+            const identifiers = extraRecords.map(record => record.universal_id).filter(Boolean);
+            const resultBox = document.getElementById('extraMongoCheck');
+            const button = document.getElementById('checkExtraBtn');
+            const mssqlDateById = {};
+            extraRecords.forEach(record => {
+                mssqlDateById[record.universal_id] = record.mssql_date || 'N/A';
+            });
+
+            if (!resultBox || identifiers.length === 0) {
+                return;
+            }
+
+            if (button) {
+                button.disabled = true;
+            }
+            resultBox.innerHTML = `
+                <div class="alert alert-info mb-0">
+                    <i class="fas fa-spinner fa-spin"></i> Checking ${identifiers.length.toLocaleString()} identifiers in MongoDB...
+                </div>
+            `;
+
+            fetch('/api/migration-validation/check-extra', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    table: tableName,
+                    identifiers: identifiers,
+                    start_date: document.getElementById('startDate').value,
+                    end_date: document.getElementById('endDate').value
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (button) {
+                    button.disabled = false;
+                }
+                if (!data.success) {
+                    resultBox.innerHTML = `<div class="alert alert-danger mb-0">${escapeHtml(data.error || 'Check failed')}</div>`;
+                    return;
+                }
+                renderExtraMongoCheck(data.data, mssqlDateById);
+            })
+            .catch(error => {
+                if (button) {
+                    button.disabled = false;
+                }
+                resultBox.innerHTML = `<div class="alert alert-danger mb-0">Check failed: ${escapeHtml(error.message)}</div>`;
+            });
+        }
+
+        function renderExtraMongoCheck(result, mssqlDateById) {
+            const resultBox = document.getElementById('extraMongoCheck');
+            const records = result.records || [];
+            let rows = '';
+
+            records.forEach((record, index) => {
+                const matches = record.matches || [];
+                const mongoDate = matches.length
+                    ? matches.map(match => escapeHtml(match.createdat_manila || '—')).join('<br>')
+                    : '—';
+                const modifiedDate = matches.length
+                    ? matches.map(match => escapeHtml(match.modifiedat_manila || '—')).join('<br>')
+                    : '—';
+                const foundLabel = record.found ? 'Yes' : 'No';
+                const foundClass = record.found ? 'status-complete' : 'status-incomplete';
+
+                rows += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td><code>${escapeHtml(record.identifier)}</code></td>
+                        <td>${escapeHtml(mssqlDateById[record.identifier] || 'N/A')}</td>
+                        <td class="${foundClass}">${foundLabel}</td>
+                        <td>${mongoDate}</td>
+                        <td>${modifiedDate}</td>
+                        <td>${escapeHtml(record.reason || '')}</td>
+                    </tr>
+                `;
+            });
+
+            resultBox.innerHTML = `
+                <div class="alert alert-info">
+                    Checked ${Number(result.checked || 0).toLocaleString()} identifiers in one query.
+                    ${Number(result.found_in_mongodb || 0).toLocaleString()} exist in MongoDB
+                    (${Number(result.outside_selected_date || 0).toLocaleString()} have ${escapeHtml(result.date_field || 'createdat')} outside the selected date).
+                    ${Number(result.missing_from_mongodb || 0).toLocaleString()} are not in MongoDB.
+                    MongoDB dates below are Manila time.
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover table-sm">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>#</th>
+                                <th>Identifier</th>
+                                <th>MSSQL createddate</th>
+                                <th>In MongoDB</th>
+                                <th>MongoDB createdat</th>
+                                <th>MongoDB modifiedat</th>
+                                <th>Why it is extra</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            `;
         }
 
         function toggleMissingRecords() {

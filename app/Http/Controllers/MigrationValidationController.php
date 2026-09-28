@@ -4790,6 +4790,184 @@ class MigrationValidationController extends Controller
     }
 
     /**
+     * Look up every extra MSSQL identifier in MongoDB with one query.
+     * No date filter, so a hit means the record exists outside the validation window.
+     */
+    public function checkExtraIdentifiers(Request $request)
+    {
+        try {
+            $tableName = $request->input('table', 'patients');
+
+            if (!isset($this->migrationTables[$tableName])) {
+                return response()->json([
+                    'success' => false,
+                    'error' => "Table '{$tableName}' is not configured for validation"
+                ], 400);
+            }
+
+            $identifiers = $request->input('identifiers', []);
+            if (!is_array($identifiers)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Identifiers must be a list'
+                ], 400);
+            }
+
+            $identifiers = array_values(array_unique(array_filter(array_map(function ($id) {
+                return trim((string) $id);
+            }, $identifiers), function ($id) {
+                return $id !== '';
+            })));
+
+            if (count($identifiers) === 0) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'No identifiers to check'
+                ], 400);
+            }
+
+            $config = $this->migrationTables[$tableName];
+            $mongoField = $config['mongodb_identifier_field'];
+            $dateField = $config['date_field_mongo'] ?? 'createdat';
+
+            $tz = 'Asia/Manila';
+            $startUtc = $this->parsePickerDate($request->input('start_date', now()->format('Y-m-d')), $tz)->utc();
+            $endUtc = $this->parsePickerDate($request->input('end_date', now()->format('Y-m-d')), $tz)->addDay()->utc();
+
+            $queryIds = $identifiers;
+            if ($mongoField === '_id') {
+                $queryIds = [];
+                foreach ($identifiers as $id) {
+                    $queryIds[] = $id;
+                    if (preg_match('/^[a-f0-9]{24}$/i', $id)) {
+                        $queryIds[] = new \MongoDB\BSON\ObjectId($id);
+                    }
+                }
+            }
+
+            $matchesById = [];
+            foreach (array_chunk($queryIds, 500) as $chunk) {
+                $docs = DB::connection('mongodb')
+                    ->collection($config['mongodb_collection'])
+                    ->whereIn($mongoField, $chunk)
+                    ->get();
+
+                foreach ($docs as $doc) {
+                    $rawId = $this->getMongoField($doc, $mongoField);
+                    if ($rawId === null) {
+                        continue;
+                    }
+                    $key = (string) $rawId;
+                    $created = $this->describeMongoInstant($doc[$dateField] ?? null);
+                    $modified = $this->describeMongoInstant($doc['modifiedat'] ?? null);
+                    $inRange = $created !== null
+                        && $created['utc_carbon']->greaterThanOrEqualTo($startUtc)
+                        && $created['utc_carbon']->lessThanOrEqualTo($endUtc);
+                    $modifiedAfterRange = $modified !== null && $modified['utc_carbon']->greaterThan($endUtc);
+
+                    $matchesById[$key][] = [
+                        'createdat_manila' => $created['manila'] ?? null,
+                        'createdat_utc' => $created['utc'] ?? null,
+                        'modifiedat_manila' => $modified['manila'] ?? null,
+                        'in_selected_range' => $inRange,
+                        'modified_after_range' => $modifiedAfterRange,
+                    ];
+                }
+            }
+
+            $records = [];
+            $foundCount = 0;
+            $outsideRangeCount = 0;
+            $missingCount = 0;
+
+            foreach ($identifiers as $id) {
+                $matches = $matchesById[$id] ?? [];
+                $found = count($matches) > 0;
+                if ($found) {
+                    $foundCount++;
+                } else {
+                    $missingCount++;
+                }
+
+                $anyInRange = false;
+                $anyModifiedAfter = false;
+                foreach ($matches as $match) {
+                    if ($match['in_selected_range']) {
+                        $anyInRange = true;
+                    }
+                    if ($match['modified_after_range']) {
+                        $anyModifiedAfter = true;
+                    }
+                }
+                if ($found && !$anyInRange) {
+                    $outsideRangeCount++;
+                }
+
+                if (!$found) {
+                    $reason = 'Not in MongoDB';
+                } elseif (!$anyInRange) {
+                    $reason = 'In MongoDB, but ' . $dateField . ' is outside the selected date';
+                } elseif ($anyModifiedAfter) {
+                    $reason = 'In MongoDB on this date, but modifiedat is after the selected day, so validation skipped it';
+                } else {
+                    $reason = 'In MongoDB inside the selected date. Validation still did not match this identifier';
+                }
+
+                $records[] = [
+                    'identifier' => $id,
+                    'found' => $found,
+                    'match_count' => count($matches),
+                    'matches' => $matches,
+                    'reason' => $reason,
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'table' => $tableName,
+                    'identifier_field' => $mongoField,
+                    'date_field' => $dateField,
+                    'checked' => count($identifiers),
+                    'found_in_mongodb' => $foundCount,
+                    'outside_selected_date' => $outsideRangeCount,
+                    'missing_from_mongodb' => $missingCount,
+                    'records' => $records,
+                ],
+            ]);
+        } catch (Exception $e) {
+            Log::error('Extra identifier check failed', [
+                'table' => $request->input('table'),
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Check failed: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function describeMongoInstant($value): ?array
+    {
+        if ($value instanceof \MongoDB\BSON\UTCDateTime) {
+            $utc = Carbon::instance($value->toDateTime())->utc();
+        } elseif ($value instanceof \DateTimeInterface) {
+            $utc = Carbon::createFromTimestamp($value->getTimestamp())->utc();
+        } elseif (is_string($value) && trim($value) !== '') {
+            $utc = Carbon::parse($value)->utc();
+        } else {
+            return null;
+        }
+
+        return [
+            'utc' => $utc->format('Y-m-d H:i:s'),
+            'manila' => $utc->copy()->timezone('Asia/Manila')->format('Y-m-d H:i:s'),
+            'utc_carbon' => $utc,
+        ];
+    }
+
+    /**
      * Find records that exist in MSSQL but not in MongoDB
      */
     public function findExtraRecords(Request $request)
