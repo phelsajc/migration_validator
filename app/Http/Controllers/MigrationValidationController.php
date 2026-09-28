@@ -4022,6 +4022,12 @@ class MigrationValidationController extends Controller
                 ], 400);
             }
 
+            $config = $this->migrationTables[$tableName];
+            $identifierField = $config['identifier_field'];
+            if (is_array($identifierField)) {
+                $identifierField = implode(', ', $identifierField);
+            }
+
             // Handle both GET and POST requests with proper date formatting
             $startDateInput = $request->input('start_date', $request->query('start_date', now()->format('Y-m-d')));
             $endDateInput = $request->input('end_date', $request->query('end_date', now()->format('Y-m-d')));
@@ -4066,6 +4072,7 @@ class MigrationValidationController extends Controller
             $isComplete = $difference === 0;
             $result = [
                 'table' => $tableName,
+                'identifier_field' => $identifierField,
                 'mongodb_count' => $mongodbCount,
                 'mssql_count' => $mssqlCount,
                 'difference' => $difference,

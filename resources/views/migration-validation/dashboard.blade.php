@@ -37,6 +37,17 @@
             opacity: 0.6;
             cursor: not-allowed;
         }
+
+        .result-breakdown {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+        }
+
+        .result-breakdown h6 {
+            font-size: 0.95rem;
+            margin-bottom: 0.75rem;
+        }
     </style>
 </head>
 <body>
@@ -131,7 +142,7 @@
             <div class="col-12">
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5><i class="fas fa-exclamation-triangle"></i> Missing Records Analysis</h5>
+                        <h5 id="analysisSectionTitle"><i class="fas fa-exclamation-triangle"></i> Missing Records Analysis</h5>
                         <button class="btn btn-outline-secondary btn-sm" onclick="toggleMissingRecords()">
                             <i class="fas fa-eye-slash"></i> Hide Details
                         </button>
@@ -325,21 +336,90 @@
             });
         }
 
+        function formatIdentifierLabel(field) {
+            if (!field) {
+                return 'identifier';
+            }
+            const value = String(field);
+            if (value.toLowerCase() === 'mrn') {
+                return 'MRN';
+            }
+            return value.replace(/_/g, ' ');
+        }
+
+        function formatSignedCount(value) {
+            const number = Number(value) || 0;
+            const formatted = Math.abs(number).toLocaleString();
+            if (number > 0) {
+                return '+' + formatted;
+            }
+            if (number < 0) {
+                return '-' + formatted;
+            }
+            return formatted;
+        }
+
+        function buildValidationSummary(isComplete, difference, identifierLabel, mongodbCount, hasAnalysis) {
+            if (!hasAnalysis) {
+                return 'Match details are unavailable, so this status cannot be checked record by record.';
+            }
+            if (isComplete) {
+                return `Complete because all ${Number(mongodbCount).toLocaleString()} MongoDB records in this date range were found in MSSQL by ${identifierLabel}. Unmatched MongoDB records: ${Number(difference).toLocaleString()}.`;
+            }
+            return `Incomplete because ${Number(difference).toLocaleString()} MongoDB record(s) have no matching ${identifierLabel} in MSSQL.`;
+        }
+
+        function buildCountGapNote(rowGap, extraCount, identifierLabel, mssqlCount, mssqlMatchRows) {
+            const notes = [];
+            if (rowGap === 0) {
+                notes.push('MongoDB and MSSQL row counts are equal.');
+            } else if (rowGap > 0) {
+                notes.push(`MSSQL has ${rowGap.toLocaleString()} more rows than MongoDB.`);
+            } else {
+                notes.push(`MongoDB has ${Math.abs(rowGap).toLocaleString()} more records than MSSQL.`);
+            }
+
+            notes.push(`${Number(extraCount).toLocaleString()} MSSQL ${identifierLabel} value(s) in this date range have no matching MongoDB record.`);
+
+            if (mssqlMatchRows !== null && Number(mssqlMatchRows) !== Number(mssqlCount)) {
+                notes.push(`Matching compares distinct MSSQL rows (${Number(mssqlMatchRows).toLocaleString()}), while the MSSQL count is every row (${Number(mssqlCount).toLocaleString()}).`);
+            }
+
+            const repeatedRows = rowGap - extraCount;
+            if (rowGap > extraCount && repeatedRows > 0) {
+                notes.push(`The other ${repeatedRows.toLocaleString()} MSSQL rows repeat an ${identifierLabel} that was already matched, so they do not change the completion result.`);
+            }
+
+            return notes.join(' ');
+        }
+
         function displayValidationResult(data) {
             const resultsDiv = document.getElementById('validationResults');
             
             if (data && data.success && data.data) {
                 const result = data.data;
                 
-                // Safe property access with fallbacks
                 const table = result.table || 'Unknown';
-                const mongodbCount = result.mongodb_count || 0;
-                const mssqlCount = result.mssql_count || 0;
-                const difference = result.difference || 0;
+                const mongodbCount = Number(result.mongodb_count ?? 0);
+                const mssqlCount = Number(result.mssql_count ?? 0);
+                const difference = Number(result.difference ?? 0);
                 const isComplete = result.is_complete || false;
                 const status = result.status || 'UNKNOWN';
                 const validatedAt = result.validated_at || new Date().toISOString();
                 const missingRecordsAnalysis = result.missing_records_analysis || null;
+                const identifierLabel = formatIdentifierLabel(result.identifier_field);
+                const foundMatches = Number(missingRecordsAnalysis?.found_matches ?? 0);
+                const missingCount = Number(missingRecordsAnalysis?.missing_from_mssql ?? (missingRecordsAnalysis?.missing_records?.length || 0));
+                const extraCount = Number(missingRecordsAnalysis?.extra_in_mssql ?? (missingRecordsAnalysis?.extra_records?.length || 0));
+                const mongoChecked = Number(missingRecordsAnalysis?.mongo_total ?? mongodbCount);
+                const mssqlMatchRows = missingRecordsAnalysis && missingRecordsAnalysis.mssql_total !== undefined
+                    ? Number(missingRecordsAnalysis.mssql_total)
+                    : null;
+                const rowGap = mssqlCount - mongodbCount;
+                const summary = buildValidationSummary(isComplete, difference, identifierLabel, mongodbCount, !!missingRecordsAnalysis);
+                const gapNote = missingRecordsAnalysis
+                    ? buildCountGapNote(rowGap, extraCount, identifierLabel, mssqlCount, mssqlMatchRows)
+                    : '';
                 
                 resultsDiv.innerHTML = `
                     <div class="validation-result p-3 mb-3">
@@ -348,15 +428,15 @@
                                 <strong>Table:</strong> ${table}
                             </div>
                             <div class="col-md-3">
-                                <strong>MongoDB Count:</strong> ${Number(mongodbCount).toLocaleString()}
+                                <strong>MongoDB Count:</strong> ${mongodbCount.toLocaleString()}
                             </div>
                             <div class="col-md-3">
-                                <strong>MSSQL Count:</strong> ${Number(mssqlCount).toLocaleString()}
+                                <strong>MSSQL Count:</strong> ${mssqlCount.toLocaleString()}
                             </div>
                             <div class="col-md-3">
-                                <strong>Difference:</strong> 
+                                <strong>Unmatched MongoDB records:</strong>
                                 <span class="${difference === 0 ? 'status-complete' : 'status-incomplete'}">
-                                    ${Number(difference).toLocaleString()}
+                                    ${difference.toLocaleString()}
                                 </span>
                             </div>
                         </div>
@@ -371,20 +451,45 @@
                                 <strong>Validated At:</strong> ${new Date(validatedAt).toLocaleString()}
                             </div>
                         </div>
-                        ${missingRecordsAnalysis && missingRecordsAnalysis.missing_records && missingRecordsAnalysis.missing_records.length > 0 ? `
+                        <div class="alert ${isComplete ? 'alert-success' : 'alert-warning'} mt-3 mb-3">
+                            ${summary}
+                            ${gapNote ? `<div class="mt-1">${gapNote}</div>` : ''}
+                        </div>
+                        ${missingRecordsAnalysis ? `
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="result-breakdown p-3 h-100">
+                                        <h6>Why this status</h6>
+                                        <div><strong>Identifier:</strong> ${identifierLabel}</div>
+                                        <div><strong>MongoDB records checked:</strong> ${mongoChecked.toLocaleString()}</div>
+                                        <div><strong>Matched in MSSQL:</strong> ${foundMatches.toLocaleString()}</div>
+                                        <div><strong>Missing from MSSQL:</strong> <span class="${missingCount === 0 ? 'status-complete' : 'status-incomplete'}">${missingCount.toLocaleString()}</span></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="result-breakdown p-3 h-100">
+                                        <h6>Why the counts differ</h6>
+                                        <div><strong>MongoDB records:</strong> ${mongodbCount.toLocaleString()}</div>
+                                        <div><strong>MSSQL rows:</strong> ${mssqlCount.toLocaleString()}</div>
+                                        <div><strong>Row count gap (MSSQL − MongoDB):</strong> <span class="${rowGap === 0 ? 'status-complete' : 'status-incomplete'}">${formatSignedCount(rowGap)}</span></div>
+                                        <div><strong>Extra MSSQL ${identifierLabel} values:</strong> <span class="${extraCount === 0 ? 'status-complete' : 'status-incomplete'}">${extraCount.toLocaleString()}</span></div>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="row mt-3">
                                 <div class="col-12">
                                     <button class="btn btn-warning btn-sm me-2" onclick="showMissingRecords('${table}')">
-                                        <i class="fas fa-exclamation-triangle"></i> View ${missingRecordsAnalysis.missing_records.length} Missing from MSSQL
+                                        <i class="fas fa-exclamation-triangle"></i> View ${missingCount.toLocaleString()} missing from MSSQL
                                     </button>
-                                    <!-- Temporarily hidden: Extra in MSSQL button -->
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="showExtraRecords('${table}')">
+                                        <i class="fas fa-list"></i> View ${extraCount.toLocaleString()} extra in MSSQL
+                                    </button>
                                 </div>
                             </div>
                         ` : ''}
                     </div>
                 `;
                 
-                // Store missing records data for later display
                 if (missingRecordsAnalysis) {
                     window.currentMissingRecords = missingRecordsAnalysis;
                 }
@@ -498,9 +603,17 @@
             `;
         }
 
+        function setAnalysisTitle(title) {
+            const titleEl = document.getElementById('analysisSectionTitle');
+            if (titleEl) {
+                titleEl.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${title}`;
+            }
+        }
+
         function showMissingRecords(tableName) {
             const missingRecordsSection = document.getElementById('missingRecordsSection');
             const missingRecordsContent = document.getElementById('missingRecordsContent');
+            setAnalysisTitle('Missing from MSSQL');
             
             if (window.currentMissingRecords && window.currentMissingRecords.missing_records) {
                 const missingRecords = window.currentMissingRecords.missing_records;
@@ -570,6 +683,7 @@
         function showExtraRecords(tableName) {
             const missingRecordsSection = document.getElementById('missingRecordsSection');
             const missingRecordsContent = document.getElementById('missingRecordsContent');
+            setAnalysisTitle('Extra in MSSQL');
             const analysis = window.currentMissingRecords || {};
             const extraRecords = analysis.extra_records || [];
 
@@ -625,7 +739,7 @@
             } else {
                 missingRecordsContent.innerHTML = `
                     <div class="alert alert-info">
-                        <i class="fas fa-info-circle"></i> No extra MSSQL records data available.
+                        <i class="fas fa-info-circle"></i> No extra MSSQL identifiers in this date range. Every MSSQL identifier was found in MongoDB.
                     </div>
                 `;
                 missingRecordsSection.style.display = 'block';
