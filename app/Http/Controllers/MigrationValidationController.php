@@ -3709,6 +3709,9 @@ class MigrationValidationController extends Controller
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
+                            ],
+                            'modifiedat' => [
+                                '$lte' => $endISODate
                             ]
                         ]
                     ],
@@ -3756,6 +3759,9 @@ class MigrationValidationController extends Controller
                         '$match' => [
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ],
+                            'modifiedat' => [
                                 '$lte' => $endISODate
                             ]
                         ]
@@ -3869,6 +3875,9 @@ class MigrationValidationController extends Controller
                         '$match' => [
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ],
+                            'modifiedat' => [
                                 '$lte' => $endISODate
                             ]
                         ]
@@ -3984,6 +3993,9 @@ class MigrationValidationController extends Controller
                         '$match' => [
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ],
+                            'modifiedat' => [
                                 '$lte' => $endISODate
                             ]
                         ]
