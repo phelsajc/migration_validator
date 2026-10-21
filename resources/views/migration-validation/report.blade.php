@@ -388,7 +388,7 @@
                                 <tr>
                                     <th>#</th>
                                     <th>Identifier</th>
-                                    <th>MSSQL Date</th>
+                                    <th>Created Date</th>
                                 </tr>
                             </thead>
                             <tbody>

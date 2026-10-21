@@ -118,8 +118,8 @@ class MigrationValidationController extends Controller
             'mssql_table' => 'patientprocedures',
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'created_date',
-            'identifier_field' => 'procedure_id',
-            'mongodb_identifier_field' => 'procedures.procedureuid',
+            'identifier_field' => 'patientprocedures_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
         ],
         'patientpackages' => [
