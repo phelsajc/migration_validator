@@ -90,13 +90,13 @@
                                     <label for="endDate" class="form-label">End Date</label>
                                     <input type="date" class="form-control" id="endDate">
                                 </div>
-                                <div class="col-md-3 d-flex align-items-end">
-                                    <button type="button" class="btn btn-primary me-2" onclick="validateSelectedTable()" id="validateBtn" disabled>
+                                <div class="col-md-3 d-flex align-items-end flex-wrap gap-2">
+                                    <button type="button" class="btn btn-primary" onclick="validateSelectedTable()" id="validateBtn" disabled>
                                         <i class="fas fa-search"></i> Validate
                                     </button>
-                                    <!-- <button type="button" class="btn btn-success" onclick="validateAllTables()">
+                                    <button type="button" class="btn btn-success" onclick="validateAllTables()" id="validateAllBtn">
                                         <i class="fas fa-check-double"></i> Validate All
-                                    </button> -->
+                                    </button>
                                 </div>
                             </div>
                             <div class="row mt-2" id="tableInfo" style="display: none;">
@@ -287,36 +287,59 @@
         }
 
         function validateAllTables() {
-            showLoading();
-            
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
-            
-            // Properly format dates for MongoDB (avoid timezone issues)
-            const startISODate = startDate ? startDate + 'T00:00:00.000Z' : new Date().toISOString().split('T')[0] + 'T00:00:00.000Z';
-            const endISODate = endDate ? endDate + 'T23:59:59.999Z' : new Date().toISOString().split('T')[0] + 'T23:59:59.999Z';
-            
+            const validateAllBtn = document.getElementById('validateAllBtn');
+            const resultsDiv = document.getElementById('validationResults');
+
+            if (!startDate || !endDate) {
+                displayError('Please select both start and end dates.');
+                return;
+            }
+
+            showLoading();
+            if (validateAllBtn) {
+                validateAllBtn.disabled = true;
+            }
+            resultsDiv.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                    <p>Counting MongoDB and MSSQL for every table.</p>
+                    <p><small>This is the count-only check. It can take a few minutes. Record matching stays on the single-table Validate button.</small></p>
+                </div>
+            `;
+
             fetch('/api/migration-validation/validate/all', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    start_date: startISODate,
-                    end_date: endISODate
+                    start_date: startDate,
+                    end_date: endDate
                 })
             })
             .then(response => response.json())
             .then(data => {
                 hideLoading();
+                if (validateAllBtn) {
+                    validateAllBtn.disabled = false;
+                }
                 displayValidationResults(data);
             })
             .catch(error => {
                 hideLoading();
+                if (validateAllBtn) {
+                    validateAllBtn.disabled = false;
+                }
                 console.error('Error:', error);
                 displayError('Validation failed: ' + error.message);
             });
+        }
+
+        function validateOneFromAll(tableName) {
+            const tableSelect = document.getElementById('tableSelect');
+            tableSelect.value = tableName;
+            loadTableInfo();
+            validateSelectedTable();
         }
 
         function loadHistory() {
@@ -359,14 +382,29 @@
             return formatted;
         }
 
-        function buildValidationSummary(isComplete, difference, identifierLabel, mongodbCount, hasAnalysis) {
+        function buildValidationSummary(isComplete, missingCount, identifierLabel, mongoChecked, hasAnalysis, countCheckGap, mongodbCount) {
             if (!hasAnalysis) {
                 return 'Match details are unavailable, so this status cannot be checked record by record.';
             }
+
+            let summary;
             if (isComplete) {
-                return `Complete because all ${Number(mongodbCount).toLocaleString()} MongoDB records in this date range were found in MSSQL by ${identifierLabel}. Unmatched MongoDB records: ${Number(difference).toLocaleString()}.`;
+                summary = `Complete because all ${Number(mongoChecked).toLocaleString()} MongoDB records checked in this date range were found in MSSQL by ${identifierLabel}.`;
+            } else {
+                summary = `Incomplete because ${Number(missingCount).toLocaleString()} MongoDB record(s) have no matching ${identifierLabel} in MSSQL.`;
             }
-            return `Incomplete because ${Number(difference).toLocaleString()} MongoDB record(s) have no matching ${identifierLabel} in MSSQL.`;
+
+            const gap = Number(countCheckGap) || 0;
+            if (gap !== 0) {
+                const gapAbs = Math.abs(gap).toLocaleString();
+                if (gap > 0) {
+                    summary += ` MongoDB count (${Number(mongodbCount).toLocaleString()}) is ${gapAbs} higher than records checked — that gap is not counted as missing IDs.`;
+                } else {
+                    summary += ` Records checked (${Number(mongoChecked).toLocaleString()}) is ${gapAbs} higher than MongoDB count (${Number(mongodbCount).toLocaleString()}) — that gap is not counted as missing IDs.`;
+                }
+            }
+
+            return summary;
         }
 
         function buildCountGapNote(rowGap, extraCount, identifierLabel, mssqlCount, mssqlMatchRows) {
@@ -402,21 +440,35 @@
                 const table = result.table || 'Unknown';
                 const mongodbCount = Number(result.mongodb_count ?? 0);
                 const mssqlCount = Number(result.mssql_count ?? 0);
-                const difference = Number(result.difference ?? 0);
                 const isComplete = result.is_complete || false;
                 const status = result.status || 'UNKNOWN';
                 const validatedAt = result.validated_at || new Date().toISOString();
                 const missingRecordsAnalysis = result.missing_records_analysis || null;
                 const identifierLabel = formatIdentifierLabel(result.identifier_field);
                 const foundMatches = Number(missingRecordsAnalysis?.found_matches ?? 0);
-                const missingCount = Number(missingRecordsAnalysis?.missing_from_mssql ?? (missingRecordsAnalysis?.missing_records?.length || 0));
+                const missingCount = Number(
+                    missingRecordsAnalysis?.missing_from_mssql
+                    ?? result.difference
+                    ?? (missingRecordsAnalysis?.missing_records?.length || 0)
+                );
                 const extraCount = Number(missingRecordsAnalysis?.extra_in_mssql ?? (missingRecordsAnalysis?.extra_records?.length || 0));
                 const mongoChecked = Number(missingRecordsAnalysis?.mongo_total ?? mongodbCount);
+                const countCheckGap = result.mongo_count_check_gap !== undefined && result.mongo_count_check_gap !== null
+                    ? Number(result.mongo_count_check_gap)
+                    : (mongodbCount - mongoChecked);
                 const mssqlMatchRows = missingRecordsAnalysis && missingRecordsAnalysis.mssql_total !== undefined
                     ? Number(missingRecordsAnalysis.mssql_total)
                     : null;
                 const rowGap = mssqlCount - mongodbCount;
-                const summary = buildValidationSummary(isComplete, difference, identifierLabel, mongodbCount, !!missingRecordsAnalysis);
+                const summary = buildValidationSummary(
+                    isComplete,
+                    missingCount,
+                    identifierLabel,
+                    mongoChecked,
+                    !!missingRecordsAnalysis,
+                    countCheckGap,
+                    mongodbCount
+                );
                 const gapNote = missingRecordsAnalysis
                     ? buildCountGapNote(rowGap, extraCount, identifierLabel, mssqlCount, mssqlMatchRows)
                     : '';
@@ -435,8 +487,8 @@
                             </div>
                             <div class="col-md-3">
                                 <strong>Unmatched MongoDB records:</strong>
-                                <span class="${difference === 0 ? 'status-complete' : 'status-incomplete'}">
-                                    ${difference.toLocaleString()}
+                                <span class="${missingCount === 0 ? 'status-complete' : 'status-incomplete'}">
+                                    ${missingCount.toLocaleString()}
                                 </span>
                             </div>
                         </div>
@@ -464,6 +516,7 @@
                                         <div><strong>MongoDB records checked:</strong> ${mongoChecked.toLocaleString()}</div>
                                         <div><strong>Matched in MSSQL:</strong> ${foundMatches.toLocaleString()}</div>
                                         <div><strong>Missing from MSSQL:</strong> <span class="${missingCount === 0 ? 'status-complete' : 'status-incomplete'}">${missingCount.toLocaleString()}</span></div>
+                                        ${countCheckGap !== 0 ? `<div><strong>Count vs checked gap:</strong> <span class="status-incomplete">${formatSignedCount(countCheckGap)}</span> (not treated as missing IDs)</div>` : ''}
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -503,58 +556,70 @@
             const resultsDiv = document.getElementById('validationResults');
             
             if (data && data.success && data.data && data.data.validations) {
-                let html = '<div class="row">';
-                
-                data.data.validations.forEach(result => {
-                    // Safe property access with fallbacks
+                const summary = data.data.summary || {};
+                const validations = [...data.data.validations].sort((a, b) => {
+                    const rank = (row) => row.status === 'ERROR' ? 0 : (row.is_complete ? 2 : 1);
+                    const rankDiff = rank(a) - rank(b);
+                    if (rankDiff !== 0) {
+                        return rankDiff;
+                    }
+                    return Math.abs(Number(b.difference) || 0) - Math.abs(Number(a.difference) || 0);
+                });
+
+                let rows = '';
+                validations.forEach(result => {
                     const table = result.table || 'Unknown';
-                    const mongodbCount = result.mongodb_count || 0;
-                    const mssqlCount = result.mssql_count || 0;
-                    const difference = result.difference || 0;
+                    const mongodbCount = result.mongodb_count;
+                    const mssqlCount = result.mssql_count;
+                    const difference = result.difference;
                     const isComplete = result.is_complete || false;
                     const status = result.status || 'UNKNOWN';
-                    
-                    html += `
-                        <div class="col-md-6 mb-3">
-                            <div class="validation-result p-3">
-                                <h6>${table}</h6>
-                                <div class="row">
-                                    <div class="col-6">
-                                        <small>MongoDB: ${Number(mongodbCount).toLocaleString()}</small><br>
-                                        <small>MSSQL: ${Number(mssqlCount).toLocaleString()}</small>
-                                    </div>
-                                    <div class="col-6 text-end">
-                                        <small>Difference: 
-                                            <span class="${difference === 0 ? 'status-complete' : 'status-incomplete'}">
-                                                ${Number(difference).toLocaleString()}
-                                            </span>
-                                        </small><br>
-                                        <span class="badge ${isComplete ? 'bg-success' : 'bg-danger'}">
-                                            ${status}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                    const badgeClass = status === 'ERROR' ? 'bg-secondary' : (isComplete ? 'bg-success' : 'bg-danger');
+                    const countText = (value) => value === null || value === undefined ? '—' : Number(value).toLocaleString();
+                    const gapText = difference === null || difference === undefined ? '—' : formatSignedCount(difference);
+
+                    rows += `
+                        <tr>
+                            <td>${escapeHtml(table)}</td>
+                            <td class="text-end">${countText(mongodbCount)}</td>
+                            <td class="text-end">${countText(mssqlCount)}</td>
+                            <td class="text-end ${difference === 0 ? 'status-complete' : 'status-incomplete'}">${gapText}</td>
+                            <td><span class="badge ${badgeClass}">${escapeHtml(status)}</span></td>
+                            <td>
+                                ${status === 'ERROR'
+                                    ? `<small class="text-danger">${escapeHtml(result.error || 'Count failed')}</small>`
+                                    : `<button class="btn btn-outline-primary btn-sm" onclick="validateOneFromAll('${escapeHtml(table)}')">Record check</button>`
+                                }
+                            </td>
+                        </tr>
                     `;
                 });
-                
-                html += '</div>';
-                
-                if (data.data.summary) {
-                    const errorCount = data.data.summary.error_tables || 0;
-                    html += `
-                        <div class="alert alert-info">
-                            <strong>Summary:</strong> 
-                            ${data.data.summary.complete_tables} complete, 
-                            ${data.data.summary.incomplete_tables} incomplete,
-                            ${errorCount} errors out of 
-                            ${data.data.summary.total_tables} total tables
-                        </div>
-                    `;
-                }
-                
-                resultsDiv.innerHTML = html;
+
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-info">
+                        <strong>Count check for every table.</strong>
+                        ${Number(summary.complete_tables || 0).toLocaleString()} counts match,
+                        ${Number(summary.incomplete_tables || 0).toLocaleString()} counts differ,
+                        ${Number(summary.error_tables || 0).toLocaleString()} errors
+                        out of ${Number(summary.total_tables || validations.length).toLocaleString()} tables.
+                        <div class="mt-1"><small>Complete here means the MongoDB count equals the MSSQL count. Use Record check on one table for the identifier match.</small></div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover table-sm">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Table</th>
+                                    <th class="text-end">MongoDB</th>
+                                    <th class="text-end">MSSQL</th>
+                                    <th class="text-end">Count gap</th>
+                                    <th>Status</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                `;
             } else {
                 console.error('Invalid response data:', data);
                 displayError(data?.error || 'Validation failed - Invalid response format');

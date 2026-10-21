@@ -499,9 +499,9 @@ class MigrationValidationController extends Controller
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ],
-                            'modifiedat' => [
+                            /* 'modifiedat' => [
                                 '$lte' => $endISODate
-                            ]
+                            ] */
                         ]
                     ],
                     [
@@ -4065,11 +4065,20 @@ class MigrationValidationController extends Controller
             // Get missing records analysis
             $missingRecordsAnalysis = $this->getMissingRecordsAnalysis($tableName, $startDate, $endDate, 50);
 
-            // Calculate difference
+            // Completion is based on ID matching, not mongodb_count - found_matches.
+            // The count query and analysis cursor can yield different totals (timeouts,
+            // cursor drain, or data changing between runs); that gap is reported separately.
             $foundMatches = $missingRecordsAnalysis['found_matches'] ?? 0;
+            $mongoChecked = $missingRecordsAnalysis['mongo_total'] ?? null;
+            $missingFromMssql = $missingRecordsAnalysis['missing_from_mssql']
+                ?? (($mongoChecked !== null) ? max(0, $mongoChecked - $foundMatches) : null);
             //$difference = $mongodbCount - $mssqlCount;
-            $difference = $mongodbCount - $foundMatches;
-            $isComplete = $difference === 0;
+            //$difference = $mongodbCount - $foundMatches;
+            $difference = $missingFromMssql !== null
+                ? (int) $missingFromMssql
+                : max(0, $mongodbCount - $foundMatches);
+            $isComplete = $missingRecordsAnalysis !== null && $difference === 0;
+            $mongoCountCheckGap = ($mongoChecked !== null) ? ($mongodbCount - (int) $mongoChecked) : null;
             $result = [
                 'table' => $tableName,
                 'identifier_field' => $identifierField,
@@ -4077,6 +4086,7 @@ class MigrationValidationController extends Controller
                 'mssql_count' => $mssqlCount,
                 'difference' => $difference,
                 'is_complete' => $isComplete,
+                'mongo_count_check_gap' => $mongoCountCheckGap,
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'validated_at' => now()->toISOString(),
