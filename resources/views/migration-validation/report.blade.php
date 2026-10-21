@@ -342,7 +342,7 @@
                 <div class="row mb-3">
                     <div class="col-md-3"><strong>Found Matches:</strong> ${Number(analysis.found_matches || 0).toLocaleString()}</div>
                     <div class="col-md-3"><strong>Missing from MSSQL:</strong> ${Number(analysis.missing_from_mssql || 0).toLocaleString()}</div>
-                    <div class="col-md-3"><strong>Extra in MSSQL:</strong> ${Number(analysis.extra_in_mssql || 0).toLocaleString()}</div>
+                    <div class="col-md-3"><strong>In MSSQL but not in MongoDB:</strong> ${Number(analysis.extra_in_mssql || 0).toLocaleString()}</div>
                     <div class="col-md-3"><strong>Validated At:</strong> ${new Date(result.validated_at).toLocaleString()}</div>
                 </div>
             `;
@@ -381,7 +381,7 @@
             if (extraRecords.length > 0) {
                 html += `
                     <hr>
-                    <h6>Extra in MSSQL / not in MongoDB (${extraRecords.length} shown)</h6>
+                    <h6>In MSSQL but not in MongoDB (${extraRecords.length} shown)</h6>
                     <div class="table-responsive">
                         <table class="table table-striped table-hover table-sm">
                             <thead class="table-dark">

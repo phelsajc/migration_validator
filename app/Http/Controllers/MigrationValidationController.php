@@ -499,9 +499,9 @@ class MigrationValidationController extends Controller
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ],
-                            /* 'modifiedat' => [
+                            'modifiedat' => [
                                 '$lte' => $endISODate
-                            ] */
+                            ]
                         ]
                     ],
                     [
@@ -4855,6 +4855,7 @@ class MigrationValidationController extends Controller
                 }
             }
 
+            $wantedLookup = array_fill_keys($identifiers, true);
             $matchesById = [];
             foreach (array_chunk($queryIds, 500) as $chunk) {
                 $docs = DB::connection('mongodb')
@@ -4863,11 +4864,12 @@ class MigrationValidationController extends Controller
                     ->get();
 
                 foreach ($docs as $doc) {
-                    $rawId = $this->getMongoField($doc, $mongoField);
-                    if ($rawId === null) {
+                    // Nested array paths (e.g. patientorderitems._id) can match several IDs per parent doc
+                    $matchedKeys = $this->extractMatchingIdentifierKeys($doc, $mongoField, $wantedLookup);
+                    if (count($matchedKeys) === 0) {
                         continue;
                     }
-                    $key = (string) $rawId;
+
                     $created = $this->describeMongoInstant($doc[$dateField] ?? null);
                     $modified = $this->describeMongoInstant($doc['modifiedat'] ?? null);
                     $inRange = $created !== null
@@ -4875,13 +4877,17 @@ class MigrationValidationController extends Controller
                         && $created['utc_carbon']->lessThanOrEqualTo($endUtc);
                     $modifiedAfterRange = $modified !== null && $modified['utc_carbon']->greaterThan($endUtc);
 
-                    $matchesById[$key][] = [
+                    $matchRow = [
                         'createdat_manila' => $created['manila'] ?? null,
                         'createdat_utc' => $created['utc'] ?? null,
                         'modifiedat_manila' => $modified['manila'] ?? null,
                         'in_selected_range' => $inRange,
                         'modified_after_range' => $modifiedAfterRange,
                     ];
+
+                    foreach ($matchedKeys as $key) {
+                        $matchesById[$key][] = $matchRow;
+                    }
                 }
             }
 
@@ -4956,6 +4962,88 @@ class MigrationValidationController extends Controller
                 'error' => 'Check failed: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Resolve identifier values from a Mongo doc, including nested array paths
+     * like patientorderitems._id.
+     */
+    private function extractMatchingIdentifierKeys($doc, string $fieldPath, array $wantedLookup): array
+    {
+        $parts = explode('.', $fieldPath);
+        $nodes = [$doc];
+
+        foreach ($parts as $part) {
+            $nextNodes = [];
+            foreach ($nodes as $node) {
+                if ($node === null) {
+                    continue;
+                }
+
+                if ($this->isTraversableList($node)) {
+                    foreach ($node as $child) {
+                        $value = $this->readDocValue($child, $part);
+                        if ($value !== null) {
+                            $nextNodes[] = $value;
+                        }
+                    }
+                    continue;
+                }
+
+                $value = $this->readDocValue($node, $part);
+                if ($value !== null) {
+                    $nextNodes[] = $value;
+                }
+            }
+            $nodes = $nextNodes;
+        }
+
+        $matched = [];
+        foreach ($nodes as $value) {
+            if ($value === null || is_array($value) || $this->isTraversableList($value)) {
+                continue;
+            }
+            $key = (string) $value;
+            if ($key !== '' && $key !== 'null' && isset($wantedLookup[$key])) {
+                $matched[$key] = true;
+            }
+        }
+
+        return array_keys($matched);
+    }
+
+    private function readDocValue($node, string $key)
+    {
+        if (is_array($node)) {
+            return array_key_exists($key, $node) ? $node[$key] : null;
+        }
+
+        if ($node instanceof \ArrayAccess) {
+            return isset($node[$key]) ? $node[$key] : null;
+        }
+
+        if (is_object($node) && isset($node->{$key})) {
+            return $node->{$key};
+        }
+
+        return null;
+    }
+
+    private function isTraversableList($value): bool
+    {
+        if ($value instanceof \MongoDB\Model\BSONArray) {
+            return true;
+        }
+
+        if (!is_array($value)) {
+            return false;
+        }
+
+        if ($value === []) {
+            return true;
+        }
+
+        return array_keys($value) === range(0, count($value) - 1);
     }
 
     private function describeMongoInstant($value): ?array
