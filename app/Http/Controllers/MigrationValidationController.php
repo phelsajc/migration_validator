@@ -117,7 +117,7 @@ class MigrationValidationController extends Controller
             'mongodb_collection' => 'patientprocedures',
             'mssql_table' => 'patientprocedures',
             'date_field_mongo' => 'createdat',
-            'date_field_mssql' => 'created_date',
+            'date_field_mssql' => 'createddate',
             'identifier_field' => 'patientprocedures_id',
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex'
@@ -2258,13 +2258,20 @@ class MigrationValidationController extends Controller
                     ],
                     [
                         '$match' => [
+                            'itemdetails._id' => [
+                                '$ne' => null
+                            ],
+                        ]
+                    ],
+                    [
+                        '$match' => [
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ],
                             'modifiedat' => [
                                 '$lte' => $endISODate
-                            ]
+                            ],
                         ]
                     ],
                     [
@@ -3098,6 +3105,9 @@ class MigrationValidationController extends Controller
                         '$match' => [
                             $config['date_field_mongo'] => [
                                 '$gte' => $startISODate,
+                                '$lte' => $endISODate
+                            ],
+                            'modifiedat' => [
                                 '$lte' => $endISODate
                             ]
                         ]
