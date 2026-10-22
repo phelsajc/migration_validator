@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
     image: migration-validator:php8.4
     ports:
       - "8080:80"
