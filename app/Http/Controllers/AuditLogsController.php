@@ -66,7 +66,7 @@ class AuditLogsController extends Controller
         })->toArray(); */
 
         $totalResult = DB::connection('mongodb')
-        ->collection('auditlogs')
+        ->table('auditlogs')
         ->raw(function ($collection) use ($countPipeline) {
             return $collection->aggregate($countPipeline, ['allowDiskUse' => true]);
         })->toArray();
@@ -159,7 +159,7 @@ class AuditLogsController extends Controller
 
         ini_set('max_execution_time', 300); // Optional safeguard
         $results = DB::connection('mongodb')
-        ->collection('auditlogs')
+        ->table('auditlogs')
         ->raw(function ($collection) use ($pipeline) {
             return $collection->aggregate($pipeline, ['allowDiskUse' => true]);
         })->toArray();
@@ -290,13 +290,13 @@ class AuditLogsController extends Controller
         //$pipeline[] = ['$count' => 'total'];
 
         /* $cursor = DB::connection('mongodb')
-            ->collection('auditlogs')
+            ->table('auditlogs')
             ->raw(function ($collection) use ($pipeline) {
                 return $collection->aggregate($pipeline);
         }); */
         /* dd(
             DB::connection('mongodb')
-                ->collection('auditlogs')
+                ->table('auditlogs')
                 ->orderBy('auditdate', 'desc')
                 ->limit(1)
                 ->first()
@@ -322,7 +322,7 @@ class AuditLogsController extends Controller
             fputcsv($handle, $columns); // header row
     
             $cursor = DB::connection('mongodb')
-                ->collection('auditlogs')
+                ->table('auditlogs')
                 ->raw(function ($collection) use ($pipeline) {
                     return $collection->aggregate($pipeline, ['allowDiskUse' => true]);
                 });

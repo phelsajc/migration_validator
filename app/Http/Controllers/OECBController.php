@@ -91,7 +91,7 @@ class OECBController extends Controller
         $countPipeline = $this->buildCountPipelineOrderDate($from, $to, $billingGroup, $orgId, $mrn);
         
         $totalResult = DB::connection('mongodb')
-            ->collection('patientorders')
+            ->table('patientorders')
             ->raw(function ($collection) use ($countPipeline) {
                 return $collection->aggregate($countPipeline, ['allowDiskUse' => true]);
             })->toArray();
@@ -107,7 +107,7 @@ class OECBController extends Controller
 
         ini_set('max_execution_time', 300);
         $results = DB::connection('mongodb')
-            ->collection('patientorders')
+            ->table('patientorders')
             ->raw(function ($collection) use ($pipeline) {
                 return $collection->aggregate($pipeline, ['allowDiskUse' => true]);
             })->toArray();
@@ -381,7 +381,7 @@ class OECBController extends Controller
         ];
         
         $totalResult = DB::connection('mongodb')
-            ->collection('patientvisits')
+            ->table('patientvisits')
             ->raw(function ($collection) use ($countPipeline) {
                 return $collection->aggregate($countPipeline, ['allowDiskUse' => true]);
             })->toArray();
@@ -393,7 +393,7 @@ class OECBController extends Controller
         $pipeline[] = ['$limit' => $perPage];
 
         $results = DB::connection('mongodb')
-            ->collection('patientvisits')
+            ->table('patientvisits')
             ->raw(function ($collection) use ($pipeline) {
                 return $collection->aggregate($pipeline, ['allowDiskUse' => true]);
             })->toArray();
@@ -476,7 +476,7 @@ class OECBController extends Controller
         $countPipeline = $this->buildCountPipelineOrderDate($from, $to, $billingGroup, $orgId, $visitId);
         
         $totalResult = DB::connection('mongodb')
-            ->collection('patientorders')
+            ->table('patientorders')
             ->raw(function ($collection) use ($countPipeline) {
                 return $collection->aggregate($countPipeline, ['allowDiskUse' => true]);
             })->toArray();
@@ -492,7 +492,7 @@ class OECBController extends Controller
 
         ini_set('max_execution_time', 300);
         $results = DB::connection('mongodb')
-            ->collection('patientorders')
+            ->table('patientorders')
             ->raw(function ($collection) use ($pipeline) {
                 return $collection->aggregate($pipeline, ['allowDiskUse' => true]);
             })->toArray();
@@ -546,7 +546,7 @@ class OECBController extends Controller
             ];
 
             $result = DB::connection('mongodb')
-                ->collection('patients')
+                ->table('patients')
                 ->raw(function ($collection) use ($pipeline) {
                     return $collection->aggregate($pipeline);
                 })->toArray();
@@ -1108,7 +1108,7 @@ class OECBController extends Controller
             \Log::info('Getting patient name for visitId: ' . $visitId);
             
             $visit = DB::connection('mongodb')
-                ->collection('patientvisits')
+                ->table('patientvisits')
                 //->where('visitid', $visitId)
                 ->where('_id', new \MongoDB\BSON\ObjectId($visitId))
                 ->first();
@@ -1117,7 +1117,7 @@ class OECBController extends Controller
 
             if ($visit && isset($visit['patientuid'])) {
                 $patient = DB::connection('mongodb')
-                    ->collection('patients')
+                    ->table('patients')
                     ->where('_id', $visit['patientuid'])
                     ->first();
 
@@ -1462,7 +1462,7 @@ class OECBController extends Controller
             ini_set('memory_limit', '512M');
             
             $result = DB::connection('mongodb')
-                ->collection('patientbills')
+                ->table('patientbills')
                 ->raw(function ($collection) use ($pipeline) {
                     return $collection->aggregate($pipeline, [
                         'allowDiskUse' => true,
@@ -1499,14 +1499,14 @@ class OECBController extends Controller
                 
                 // Get visit details directly
                 $visit = DB::connection('mongodb')
-                    ->collection('patientvisits')
+                    ->table('patientvisits')
                     ->where('visitid', $visitId)
                     ->first();
                 
                 if ($visit) {
                     // Get patient details
                     $patient = DB::connection('mongodb')
-                        ->collection('patients')
+                        ->table('patients')
                         ->where('_id', $visit['patientuid'])
                         ->first();
                     

@@ -4382,7 +4382,7 @@ class MigrationValidationController extends Controller
                     $endISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000);
 
                     $count = DB::connection('mongodb')
-                        ->collection($config['mongodb_collection'])
+                        ->table($config['mongodb_collection'])
                         ->where($config['date_field_mongo'], '>=', $startISODate)
                         ->where($config['date_field_mongo'], '<=', $endISODate)
                         ->count();
@@ -4400,7 +4400,7 @@ class MigrationValidationController extends Controller
 
             // Method 2: Use aggregation pipeline
             $result = DB::connection('mongodb')
-                ->collection($config['mongodb_collection'])
+                ->table($config['mongodb_collection'])
                 ->raw(function ($collection) use ($pipeline) {
                     return $collection->aggregate($pipeline, [
                         'allowDiskUse' => true,
@@ -4494,7 +4494,7 @@ class MigrationValidationController extends Controller
 
             // Get sample records to see what's being matched
             $sampleRecords = DB::connection('mongodb')
-                ->collection($config['mongodb_collection'])
+                ->table($config['mongodb_collection'])
                 ->where($config['date_field_mongo'], '>=', $startISODate)
                 ->where($config['date_field_mongo'], '<=', $endISODate)
                 ->limit(5)
@@ -4503,14 +4503,14 @@ class MigrationValidationController extends Controller
 
             // Get total count
             $totalCount = DB::connection('mongodb')
-                ->collection($config['mongodb_collection'])
+                ->table($config['mongodb_collection'])
                 ->where($config['date_field_mongo'], '>=', $startISODate)
                 ->where($config['date_field_mongo'], '<=', $endISODate)
                 ->count();
 
             // Get all records with their dates for debugging
             $allRecords = DB::connection('mongodb')
-                ->collection($config['mongodb_collection'])
+                ->table($config['mongodb_collection'])
                 ->limit(20)
                 ->get()
                 ->toArray();
@@ -4572,7 +4572,7 @@ class MigrationValidationController extends Controller
 
             // Get sample records from MongoDB
             $mongoSamples = DB::connection('mongodb')
-                ->collection('patients')
+                ->table('patients')
                 ->where('modifiedat', '>=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000))
                 ->where('modifiedat', '<=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000))
                 ->limit(5)
@@ -4643,7 +4643,7 @@ class MigrationValidationController extends Controller
             // Execute aggregation pipeline to get records using cursor (prevents memory exhaustion)
             // Don't use toArray() - process via cursor to avoid loading all records into memory
             $mongoCursor = DB::connection('mongodb')
-                ->collection($config['mongodb_collection'])
+                ->table($config['mongodb_collection'])
                 ->raw(function ($collection) use ($pipeline) {
                     return $collection->aggregate($pipeline, [
                         'allowDiskUse' => true,
@@ -4869,7 +4869,7 @@ class MigrationValidationController extends Controller
             $matchesById = [];
             foreach (array_chunk($queryIds, 500) as $chunk) {
                 $docs = DB::connection('mongodb')
-                    ->collection($config['mongodb_collection'])
+                    ->table($config['mongodb_collection'])
                     ->whereIn($mongoField, $chunk)
                     ->get();
 
@@ -5093,7 +5093,7 @@ class MigrationValidationController extends Controller
 
             // Get all MongoDB records for the date range
             $mongoRecords = DB::connection('mongodb')
-                ->collection('patients')
+                ->table('patients')
                 ->where('modifiedat', '>=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000))
                 ->where('modifiedat', '<=', new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000))
                 ->get()

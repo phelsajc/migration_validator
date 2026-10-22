@@ -253,7 +253,7 @@ class CsfControllerv3 extends FPDF
             ];
 
             $result = DB::connection('mongodb')
-                ->collection('patientvisits')
+                ->table('patientvisits')
                 ->raw(function ($collection) use ($pipeline) {
                     return $collection->aggregate($pipeline, ['allowDiskUse' => true]);
                 })->toArray();

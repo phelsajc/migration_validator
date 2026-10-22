@@ -45,7 +45,7 @@ class UserAuthController extends Controller
         
         $allow_login = false;
 
-        //$users = DB::connection('mongodb')->collection('users')->get();
+        //$users = DB::connection('mongodb')->table('users')->get();
         if ($username == "ftfuentes") {
             $username = "006240";
         }
