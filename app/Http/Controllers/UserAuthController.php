@@ -96,9 +96,9 @@ class UserAuthController extends Controller
                     //session(['user_id' => $users->_id]);
                     session()->put('user_id', $users->_id); // or a hardcoded value for testing
                     $request->session()->put('username', $users->loginid);
-                    $request->session()->put('lastname', utf8_encode($users->lastname));
-                    $request->session()->put('firstname', utf8_encode($users->name));
-                    $request->session()->put('middlename', utf8_encode($users->middlename));
+                    $request->session()->put('lastname', mb_convert_encoding((string) $users->lastname, 'UTF-8', 'ISO-8859-1'));
+                    $request->session()->put('firstname', mb_convert_encoding((string) $users->name, 'UTF-8', 'ISO-8859-1'));
+                    $request->session()->put('middlename', mb_convert_encoding((string) $users->middlename, 'UTF-8', 'ISO-8859-1'));
                     return redirect('/migration-validation'); 
                 }
                 else {
