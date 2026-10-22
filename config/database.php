@@ -100,6 +100,8 @@ return [
             'password' => env('DB_PASSWORD_SQLSRV', 's@password1'),
             'charset' => 'utf8',
             'prefix' => '',
+            'encrypt' => env('DB_ENCRYPT_SQLSRV', 'yes'),
+            'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE_SQLSRV', true),
         ],
 
         /* 'sqlsrv' => [
@@ -122,6 +124,8 @@ return [
             'password' => env('DB_PASSWORD_SQLSRV', 's@password1'),
             'charset' => 'utf8',
             'prefix' => '',
+            'encrypt' => env('DB_ENCRYPT_SQLSRV', 'yes'),
+            'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE_SQLSRV', true),
         ],
 
         'mongodb' => [
