@@ -13,6 +13,6 @@ class UsersModel extends Eloquent implements AuthenticatableContract
     use Authenticatable;
 
     protected $connection = 'mongodb';
-    protected $collection = 'users'; // optional: set your collection name
+    protected $table = 'users';
     protected $fillable = ['name', 'lastname', 'loginid']; // Fields you want to make mass-assignable
 }
