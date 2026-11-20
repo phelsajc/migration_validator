@@ -499,9 +499,9 @@ class MigrationValidationController extends Controller
                                 '$gte' => $startISODate,
                                 '$lte' => $endISODate
                             ],
-                            'modifiedat' => [
+                            /* 'modifiedat' => [
                                 '$lte' => $endISODate
-                            ]
+                            ] */
                         ]
                     ],
                     [
