@@ -421,6 +421,85 @@ class MigrationValidationController extends Controller
     }
 
     /**
+     * Build a $dateToString expression for a field in the given timezone (calendar day).
+     */
+    private function buildManilaDateToStringExpr(string $field, string $tz = 'Asia/Manila'): array
+    {
+        return [
+            '$dateToString' => [
+                'format' => '%Y-%m-%d',
+                'date' => '$' . $field,
+                'timezone' => $tz,
+            ],
+        ];
+    }
+
+    /**
+     * Rewrite pipeline $match date filters to compare Asia/Manila calendar days only
+     * (via $dateToString), instead of UTCDateTime instant ranges.
+     */
+    private function rewritePipelineDatesToManilaCalendar(
+        array $pipeline,
+        string $dateField,
+        string $startYmd,
+        string $endYmd,
+        string $tz = 'Asia/Manila'
+    ): array {
+        foreach ($pipeline as $i => $stage) {
+            if (!isset($stage['$match']) || !is_array($stage['$match'])) {
+                continue;
+            }
+
+            $match = $stage['$match'];
+            $exprAnd = [];
+
+            if (
+                isset($match[$dateField])
+                && is_array($match[$dateField])
+                && array_key_exists('$gte', $match[$dateField])
+                && array_key_exists('$lte', $match[$dateField])
+            ) {
+                $dateExpr = $this->buildManilaDateToStringExpr($dateField, $tz);
+                $exprAnd[] = ['$gte' => [$dateExpr, $startYmd]];
+                $exprAnd[] = ['$lte' => [$dateExpr, $endYmd]];
+                unset($match[$dateField]);
+            }
+
+            if (
+                isset($match['modifiedat'])
+                && is_array($match['modifiedat'])
+                && array_key_exists('$lte', $match['modifiedat'])
+                && count($match['modifiedat']) === 1
+            ) {
+                $modExpr = $this->buildManilaDateToStringExpr('modifiedat', $tz);
+                $exprAnd[] = ['$lte' => [$modExpr, $endYmd]];
+                unset($match['modifiedat']);
+            }
+
+            if ($exprAnd === []) {
+                continue;
+            }
+
+            if (isset($match['$expr'])) {
+                $existing = $match['$expr'];
+                if (isset($existing['$and']) && is_array($existing['$and'])) {
+                    $exprAnd = array_merge($existing['$and'], $exprAnd);
+                } else {
+                    array_unshift($exprAnd, $existing);
+                }
+            }
+
+            $match['$expr'] = count($exprAnd) === 1
+                ? $exprAnd[0]
+                : ['$and' => $exprAnd];
+
+            $pipeline[$i]['$match'] = $match;
+        }
+
+        return $pipeline;
+    }
+
+    /**
      * Get pipeline for specific table based on configuration
      */
     private function getPipelineForTable($tableName, $startDate, $endDate)
@@ -444,13 +523,19 @@ class MigrationValidationController extends Controller
         /* $start = Carbon::createFromFormat('Y-m-d', $startDate, $tz)->startOfDay();
         $end = Carbon::createFromFormat('Y-m-d', $endDate, $tz)->startOfDay()->addDay(); */
 
+        // Calendar dates in Asia/Manila (no time). Pipelines still build UTCDateTime
+        // bounds for structure; rewritePipelineDatesToManilaCalendar converts $match
+        // to $dateToString calendar-day comparisons.
         $start = $this->parsePickerDate($startDate, $tz);
-        $end = $this->parsePickerDate($endDate, $tz)->addDay();
+        $endExclusive = $this->parsePickerDate($endDate, $tz)->addDay();
+        $startDateStr = $start->format('Y-m-d');
+        $endDateStr = $this->parsePickerDate($endDate, $tz)->format('Y-m-d');
         $startISODate = new \MongoDB\BSON\UTCDateTime($start->timestamp * 1000);
-        $endISODate = new \MongoDB\BSON\UTCDateTime($end->timestamp * 1000);
+        $endISODate = new \MongoDB\BSON\UTCDateTime($endExclusive->timestamp * 1000);
 
         //echo $startISODate . ' <br> ' . $endISODate . ' <br> ';
 
+        $pipeline = (function () use ($tableName, $config, $startISODate, $endISODate) {
         switch ($tableName) {
             case 'patients':
                 return [
@@ -4015,6 +4100,15 @@ class MigrationValidationController extends Controller
                     ]
                 ];
         }
+        })();
+
+        return $this->rewritePipelineDatesToManilaCalendar(
+            $pipeline,
+            $config['date_field_mongo'],
+            $startDateStr,
+            $endDateStr,
+            $tz
+        );
     }
 
     /**
