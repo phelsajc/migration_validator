@@ -399,12 +399,12 @@ class MigrationValidationController extends Controller
         return view('migration-validation.report');
     }
 
-    private function parsePickerDate(string $date, string $tz = 'Asia/Manila'): Carbon
+    private function parsePickerDate(string $date, string $tz = 'UTC'): Carbon
     {
         $date = trim($date);
 
         // ISO from date picker: 2026-09-16T00:00:00.000000Z
-        // Take the calendar date the user picked, interpret as PHT day.
+        // Take the calendar date the user picked, interpret as a UTC day.
         if (preg_match('/^(\d{4}-\d{2}-\d{2})T/', $date, $m)) {
             return Carbon::createFromFormat('Y-m-d', $m[1], $tz)->startOfDay();
         }
@@ -423,7 +423,7 @@ class MigrationValidationController extends Controller
     /**
      * Build a $dateToString expression for a field in the given timezone (calendar day).
      */
-    private function buildManilaDateToStringExpr(string $field, string $tz = 'Asia/Manila'): array
+    private function buildCalendarDateToStringExpr(string $field, string $tz = 'UTC'): array
     {
         return [
             '$dateToString' => [
@@ -435,15 +435,15 @@ class MigrationValidationController extends Controller
     }
 
     /**
-     * Rewrite pipeline $match date filters to compare Asia/Manila calendar days only
+     * Rewrite pipeline $match date filters to compare UTC calendar days only
      * (via $dateToString), instead of UTCDateTime instant ranges.
      */
-    private function rewritePipelineDatesToManilaCalendar(
+    private function rewritePipelineDatesToUtcCalendar(
         array $pipeline,
         string $dateField,
         string $startYmd,
         string $endYmd,
-        string $tz = 'Asia/Manila'
+        string $tz = 'UTC'
     ): array {
         foreach ($pipeline as $i => $stage) {
             if (!isset($stage['$match']) || !is_array($stage['$match'])) {
@@ -459,7 +459,7 @@ class MigrationValidationController extends Controller
                 && array_key_exists('$gte', $match[$dateField])
                 && array_key_exists('$lte', $match[$dateField])
             ) {
-                $dateExpr = $this->buildManilaDateToStringExpr($dateField, $tz);
+                $dateExpr = $this->buildCalendarDateToStringExpr($dateField, $tz);
                 $exprAnd[] = ['$gte' => [$dateExpr, $startYmd]];
                 $exprAnd[] = ['$lte' => [$dateExpr, $endYmd]];
                 unset($match[$dateField]);
@@ -471,7 +471,7 @@ class MigrationValidationController extends Controller
                 && array_key_exists('$lte', $match['modifiedat'])
                 && count($match['modifiedat']) === 1
             ) {
-                $modExpr = $this->buildManilaDateToStringExpr('modifiedat', $tz);
+                $modExpr = $this->buildCalendarDateToStringExpr('modifiedat', $tz);
                 $exprAnd[] = ['$lte' => [$modExpr, $endYmd]];
                 unset($match['modifiedat']);
             }
@@ -512,7 +512,7 @@ class MigrationValidationController extends Controller
         /* $startISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($startDate)->timestamp * 1000);
         $endISODate = new \MongoDB\BSON\UTCDateTime(Carbon::parse($endDate)->timestamp * 1000); */
 
-        $tz = 'Asia/Manila';
+        $tz = 'UTC';
         //$start = Carbon::parse($startDate, $tz)->startOfDay();
         //$end = Carbon::parse($endDate, $tz)->startOfDay()->addDay();
 
@@ -523,8 +523,8 @@ class MigrationValidationController extends Controller
         /* $start = Carbon::createFromFormat('Y-m-d', $startDate, $tz)->startOfDay();
         $end = Carbon::createFromFormat('Y-m-d', $endDate, $tz)->startOfDay()->addDay(); */
 
-        // Calendar dates in Asia/Manila (no time). Pipelines still build UTCDateTime
-        // bounds for structure; rewritePipelineDatesToManilaCalendar converts $match
+        // Calendar dates in UTC (no time). Pipelines still build UTCDateTime
+        // bounds for structure; rewritePipelineDatesToUtcCalendar converts $match
         // to $dateToString calendar-day comparisons.
         $start = $this->parsePickerDate($startDate, $tz);
         $endExclusive = $this->parsePickerDate($endDate, $tz)->addDay();
@@ -4102,7 +4102,7 @@ class MigrationValidationController extends Controller
         }
         })();
 
-        return $this->rewritePipelineDatesToManilaCalendar(
+        return $this->rewritePipelineDatesToUtcCalendar(
             $pipeline,
             $config['date_field_mongo'],
             $startDateStr,
@@ -4524,12 +4524,12 @@ class MigrationValidationController extends Controller
         try {
             $config = $this->migrationTables[$tableName];
 
-            $tz = 'Asia/Manila';
-            // One picker value only
-            $start = Carbon::parse($startDate)->timezone($tz)->startOfDay()->utc();
-            $end = $start->copy()->addDay(); // next midnight PHT, in UTC
-            $startDateTime = $start->format('Y-m-d 16:00:00'); // 2026-09-15 16:00:00
-            $endDateTime = $end->format('Y-m-d 15:59:59');   // 2026-09-16 16:00:00
+            $tz = 'UTC';
+            // UTC calendar-day window from date picker (inclusive start, exclusive end)
+            $start = $this->parsePickerDate($startDate, $tz);
+            $end = $this->parsePickerDate($endDate, $tz)->addDay();
+            $startDateTime = $start->format('Y-m-d H:i:s');
+            $endDateTime = $end->format('Y-m-d H:i:s');
 
             //return $startDateTime . ' AND ' . $endDateTime;
 
@@ -4714,8 +4714,8 @@ class MigrationValidationController extends Controller
 
             $config = $this->migrationTables[$tableName];
 
-            // Same Manila-day window as getMSSQLCount / Mongo pipeline
-            $tz = 'Asia/Manila';
+            // Same UTC-day window as getMSSQLCount / Mongo pipeline
+            $tz = 'UTC';
             $start = $this->parsePickerDate($startDate, $tz)->utc();
             $end = $this->parsePickerDate($endDate, $tz)->addDay()->utc();
             $startDateTime = $start->format('Y-m-d H:i:s');
@@ -4944,7 +4944,7 @@ class MigrationValidationController extends Controller
             $mongoField = $config['mongodb_identifier_field'];
             $dateField = $config['date_field_mongo'] ?? 'createdat';
 
-            $tz = 'Asia/Manila';
+            $tz = 'UTC';
             $startUtc = $this->parsePickerDate($request->input('start_date', now()->format('Y-m-d')), $tz)->utc();
             $endUtc = $this->parsePickerDate($request->input('end_date', now()->format('Y-m-d')), $tz)->addDay()->utc();
 

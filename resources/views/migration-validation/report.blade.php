@@ -42,12 +42,12 @@
                         <form id="reportForm" onsubmit="return false;">
                             <div class="row">
                                 <div class="col-md-3">
-                                    <label for="startDate" class="form-label">Start Date</label>
-                                    <input type="date" class="form-control" id="startDate">
+                                    <label for="startDate" class="form-label">Start Date (UTC)</label>
+                                    <input type="date" class="form-control" id="startDate" title="Calendar day in UTC">
                                 </div>
                                 <div class="col-md-3">
-                                    <label for="endDate" class="form-label">End Date</label>
-                                    <input type="date" class="form-control" id="endDate">
+                                    <label for="endDate" class="form-label">End Date (UTC)</label>
+                                    <input type="date" class="form-control" id="endDate" title="Calendar day in UTC">
                                 </div>
                                 <div class="col-md-6 d-flex align-items-end gap-2">
                                     <button type="button" class="btn btn-primary" onclick="generateReport()" id="generateBtn">

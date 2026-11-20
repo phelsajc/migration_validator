@@ -83,12 +83,12 @@
                                     </select>
                                 </div>
                                 <div class="col-md-3">
-                                    <label for="startDate" class="form-label">Start Date</label>
-                                    <input type="date" class="form-control" id="startDate">
+                                    <label for="startDate" class="form-label">Start Date (UTC)</label>
+                                    <input type="date" class="form-control" id="startDate" title="Calendar day in UTC">
                                 </div>
                                 <div class="col-md-3">
-                                    <label for="endDate" class="form-label">End Date</label>
-                                    <input type="date" class="form-control" id="endDate">
+                                    <label for="endDate" class="form-label">End Date (UTC)</label>
+                                    <input type="date" class="form-control" id="endDate" title="Calendar day in UTC">
                                 </div>
                                 <div class="col-md-3 d-flex align-items-end flex-wrap gap-2">
                                     <button type="button" class="btn btn-primary" onclick="validateSelectedTable()" id="validateBtn" disabled>
@@ -128,8 +128,8 @@
                         <div id="validationResults">
                             <div class="text-center text-muted">
                                 <i class="fas fa-info-circle fa-2x mb-3"></i>
-                                <p>Select a table and date range, then click "Validate" to start validation.</p>
-                                <p><small>Use "Validate All" to check all configured tables at once.</small></p>
+                                <p>Select a table and UTC date range, then click "Validate" to start validation.</p>
+                                <p><small>Dates are UTC calendar days. Use "Validate All" to check all configured tables at once.</small></p>
                             </div>
                         </div>
                     </div>
