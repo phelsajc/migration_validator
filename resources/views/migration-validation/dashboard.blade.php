@@ -48,6 +48,30 @@
             font-size: 0.95rem;
             margin-bottom: 0.75rem;
         }
+
+        .summary-chip {
+            display: inline-block;
+            padding: 0.35rem 0.75rem;
+            border-radius: 6px;
+            font-weight: 600;
+            margin-right: 0.5rem;
+            margin-bottom: 0.35rem;
+        }
+
+        .summary-chip-complete { background-color: #d1e7dd; color: #0f5132; }
+        .summary-chip-incomplete { background-color: #f8d7da; color: #842029; }
+        .summary-chip-error { background-color: #e2e3e5; color: #41464b; }
+        .summary-chip-total { background-color: #cff4fc; color: #055160; }
+
+        .incomplete-callout-item {
+            display: inline-block;
+            margin: 0.15rem 0.35rem 0.15rem 0;
+            padding: 0.2rem 0.55rem;
+            background: #fff;
+            border: 1px solid #f5c2c7;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
     </style>
 </head>
 <body>
@@ -128,8 +152,8 @@
                         <div id="validationResults">
                             <div class="text-center text-muted">
                                 <i class="fas fa-info-circle fa-2x mb-3"></i>
-                                <p>Select a table and UTC date range, then click "Validate" to start validation.</p>
-                                <p><small>Dates are UTC calendar days. Use "Validate All" to check all configured tables at once.</small></p>
+                                <p>Loading previous-day count check for all tables automatically…</p>
+                                <p><small>Dates are UTC calendar days. You can still pick a range and use Validate or Validate All.</small></p>
                             </div>
                         </div>
                     </div>
@@ -523,6 +547,17 @@
             }
         }
 
+        function formatDisplayDate(value) {
+            if (!value) {
+                return document.getElementById('startDate')?.value || '—';
+            }
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return String(value).split('T')[0];
+            }
+            return date.toISOString().split('T')[0];
+        }
+
         function displayValidationResults(data) {
             const resultsDiv = document.getElementById('validationResults');
             
@@ -536,6 +571,44 @@
                     }
                     return Math.abs(Number(b.difference) || 0) - Math.abs(Number(a.difference) || 0);
                 });
+
+                const completeCount = Number(summary.complete_tables || 0);
+                const incompleteCount = Number(summary.incomplete_tables || 0);
+                const errorCount = Number(summary.error_tables || 0);
+                const totalCount = Number(summary.total_tables || validations.length);
+                const dayLabel = formatDisplayDate(data.data.start_date || data.data.end_date);
+                const validatedAt = data.data.validated_at
+                    ? new Date(data.data.validated_at).toLocaleString()
+                    : new Date().toLocaleString();
+
+                const incompleteTables = validations.filter(row => row.status !== 'ERROR' && !row.is_complete);
+                const errorTables = validations.filter(row => row.status === 'ERROR');
+
+                let incompleteCallout = '';
+                if (incompleteTables.length > 0 || errorTables.length > 0) {
+                    const mismatchItems = incompleteTables.map(row => {
+                        const gap = row.difference === null || row.difference === undefined
+                            ? '—'
+                            : formatSignedCount(row.difference);
+                        return `<span class="incomplete-callout-item"><strong>${escapeHtml(row.table || 'Unknown')}</strong> gap ${gap}</span>`;
+                    }).join('');
+                    const errorItems = errorTables.map(row =>
+                        `<span class="incomplete-callout-item"><strong>${escapeHtml(row.table || 'Unknown')}</strong> error</span>`
+                    ).join('');
+
+                    incompleteCallout = `
+                        <div class="alert alert-warning">
+                            <strong>Needs attention</strong>
+                            <div class="mt-2">${mismatchItems}${errorItems}</div>
+                        </div>
+                    `;
+                } else {
+                    incompleteCallout = `
+                        <div class="alert alert-success">
+                            <strong>All tables match</strong> for ${escapeHtml(dayLabel)}. MongoDB and MSSQL counts are equal.
+                        </div>
+                    `;
+                }
 
                 let rows = '';
                 validations.forEach(result => {
@@ -567,14 +640,23 @@
                 });
 
                 resultsDiv.innerHTML = `
-                    <div class="alert alert-info">
-                        <strong>Count check for every table.</strong>
-                        ${Number(summary.complete_tables || 0).toLocaleString()} counts match,
-                        ${Number(summary.incomplete_tables || 0).toLocaleString()} counts differ,
-                        ${Number(summary.error_tables || 0).toLocaleString()} errors
-                        out of ${Number(summary.total_tables || validations.length).toLocaleString()} tables.
-                        <div class="mt-1"><small>Complete here means the MongoDB count equals the MSSQL count. Use Record check on one table for the identifier match.</small></div>
+                    <div class="alert alert-primary mb-3">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div>
+                                <strong>Previous day:</strong> ${escapeHtml(dayLabel)}
+                                <span class="text-muted ms-2">(UTC calendar day)</span>
+                            </div>
+                            <div><small class="text-muted">Validated at ${escapeHtml(validatedAt)}</small></div>
+                        </div>
                     </div>
+                    <div class="mb-3">
+                        <span class="summary-chip summary-chip-complete">${completeCount.toLocaleString()} complete</span>
+                        <span class="summary-chip summary-chip-incomplete">${incompleteCount.toLocaleString()} incomplete</span>
+                        <span class="summary-chip summary-chip-error">${errorCount.toLocaleString()} errors</span>
+                        <span class="summary-chip summary-chip-total">${totalCount.toLocaleString()} total</span>
+                    </div>
+                    ${incompleteCallout}
+                    <p class="text-muted small mb-2">Complete means MongoDB count equals MSSQL count. Use Record check for identifier match details.</p>
                     <div class="table-responsive">
                         <table class="table table-striped table-hover table-sm">
                             <thead class="table-dark">
@@ -827,6 +909,9 @@
             
             // Load available tables
             loadAvailableTables();
+
+            // Auto-run previous-day all-tables count check on login/dashboard load
+            validateAllTables();
         });
     </script>
 </body>
