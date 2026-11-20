@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Exception;
 use Carbon\Carbon;
 
@@ -4233,64 +4234,35 @@ class MigrationValidationController extends Controller
             $errorCount = 0;
 
             foreach ($this->migrationTables as $tableName => $config) {
-                try {
-                    $mongodbCount = $this->getMongoDBCount($startDate, $endDate, $tableName);
-                    $mssqlCount = $this->getMSSQLCount($startDate, $endDate, $tableName);
-                    $difference = $mongodbCount - $mssqlCount;
-                    $isComplete = $difference === 0;
-
-                    if ($isComplete) {
-                        $completeCount++;
-                    } else {
-                        $incompleteCount++;
-                    }
-
-                    $validations[] = [
-                        'table' => $tableName,
-                        'mongodb_collection' => $config['mongodb_collection'],
-                        'mssql_table' => $config['mssql_table'],
-                        'mongodb_count' => $mongodbCount,
-                        'mssql_count' => $mssqlCount,
-                        'difference' => $difference,
-                        'is_complete' => $isComplete,
-                        'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
-                        'error' => null,
-                    ];
-                } catch (Exception $e) {
+                $row = $this->buildTableCountResult($tableName, $startDate, $endDate);
+                if ($row['status'] === 'ERROR') {
                     $errorCount++;
-                    Log::error('Migration validation error for table', [
-                        'table' => $tableName,
-                        'error' => $e->getMessage(),
-                    ]);
-
-                    $validations[] = [
-                        'table' => $tableName,
-                        'mongodb_collection' => $config['mongodb_collection'],
-                        'mssql_table' => $config['mssql_table'],
-                        'mongodb_count' => null,
-                        'mssql_count' => null,
-                        'difference' => null,
-                        'is_complete' => false,
-                        'status' => 'ERROR',
-                        'error' => $e->getMessage(),
-                    ];
+                } elseif ($row['is_complete']) {
+                    $completeCount++;
+                } else {
+                    $incompleteCount++;
                 }
+                $validations[] = $row;
             }
+
+            $payload = [
+                'validations' => $validations,
+                'summary' => [
+                    'total_tables' => count($this->migrationTables),
+                    'complete_tables' => $completeCount,
+                    'incomplete_tables' => $incompleteCount,
+                    'error_tables' => $errorCount,
+                ],
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'validated_at' => now()->toISOString(),
+            ];
+
+            $this->saveCachedAllResults($startDateInput, $endDateInput, $payload);
 
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'validations' => $validations,
-                    'summary' => [
-                        'total_tables' => count($this->migrationTables),
-                        'complete_tables' => $completeCount,
-                        'incomplete_tables' => $incompleteCount,
-                        'error_tables' => $errorCount,
-                    ],
-                    'start_date' => $startDate,
-                    'end_date' => $endDate,
-                    'validated_at' => now()->toISOString(),
-                ],
+                'data' => $payload,
             ]);
         } catch (Exception $e) {
             Log::error('Migration validation report error', [
@@ -4302,6 +4274,203 @@ class MigrationValidationController extends Controller
                 'error' => 'Report generation failed: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Count-only check for a single table (fast path for progressive UI).
+     */
+    public function validateTableCounts(Request $request)
+    {
+        try {
+            $tableName = $request->input('table', $request->query('table'));
+            if (!$tableName || !isset($this->migrationTables[$tableName])) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Invalid or missing table name',
+                ], 400);
+            }
+
+            $startDateInput = $request->input('start_date', $request->query('start_date', now()->format('Y-m-d')));
+            $endDateInput = $request->input('end_date', $request->query('end_date', now()->format('Y-m-d')));
+            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
+            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
+
+            $row = $this->buildTableCountResult($tableName, $startDate, $endDate);
+
+            return response()->json([
+                'success' => true,
+                'data' => $row,
+            ]);
+        } catch (Exception $e) {
+            Log::error('Migration table count error', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Count check failed: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Return cached all-tables count results for a date range (instant on login).
+     */
+    public function getCachedAllResults(Request $request)
+    {
+        try {
+            $startDateInput = $request->input('start_date', $request->query('start_date'));
+            $endDateInput = $request->input('end_date', $request->query('end_date'));
+
+            if (!$startDateInput || !$endDateInput) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'start_date and end_date are required',
+                ], 400);
+            }
+
+            $cached = $this->loadCachedAllResults($startDateInput, $endDateInput);
+            if (!$cached) {
+                return response()->json([
+                    'success' => false,
+                    'cached' => false,
+                    'error' => 'No cached results for this date range',
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'cached' => true,
+                'data' => $cached,
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to load cached results: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Persist a progressive/live all-tables payload for later instant load.
+     */
+    public function saveCachedAllResultsRequest(Request $request)
+    {
+        try {
+            $startDateInput = $request->input('start_date');
+            $endDateInput = $request->input('end_date');
+            $validations = $request->input('validations');
+            $summary = $request->input('summary');
+
+            if (!$startDateInput || !$endDateInput || !is_array($validations)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'start_date, end_date, and validations are required',
+                ], 400);
+            }
+
+            $startDate = Carbon::parse($startDateInput)->startOfDay()->toISOString();
+            $endDate = Carbon::parse($endDateInput)->endOfDay()->toISOString();
+
+            $payload = [
+                'validations' => $validations,
+                'summary' => $summary ?: [
+                    'total_tables' => count($validations),
+                    'complete_tables' => count(array_filter($validations, function ($row) {
+                        return ($row['status'] ?? '') === 'COMPLETE';
+                    })),
+                    'incomplete_tables' => count(array_filter($validations, function ($row) {
+                        return ($row['status'] ?? '') === 'INCOMPLETE';
+                    })),
+                    'error_tables' => count(array_filter($validations, function ($row) {
+                        return ($row['status'] ?? '') === 'ERROR';
+                    })),
+                ],
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'validated_at' => $request->input('validated_at', now()->toISOString()),
+            ];
+
+            $this->saveCachedAllResults($startDateInput, $endDateInput, $payload);
+
+            return response()->json([
+                'success' => true,
+                'data' => $payload,
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to save cached results: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function buildTableCountResult($tableName, $startDate, $endDate)
+    {
+        $config = $this->migrationTables[$tableName];
+
+        try {
+            $mongodbCount = $this->getMongoDBCount($startDate, $endDate, $tableName);
+            $mssqlCount = $this->getMSSQLCount($startDate, $endDate, $tableName);
+            $difference = $mongodbCount - $mssqlCount;
+            $isComplete = $difference === 0;
+
+            return [
+                'table' => $tableName,
+                'mongodb_collection' => $config['mongodb_collection'],
+                'mssql_table' => $config['mssql_table'],
+                'mongodb_count' => $mongodbCount,
+                'mssql_count' => $mssqlCount,
+                'difference' => $difference,
+                'is_complete' => $isComplete,
+                'status' => $isComplete ? 'COMPLETE' : 'INCOMPLETE',
+                'error' => null,
+            ];
+        } catch (Exception $e) {
+            Log::error('Migration validation error for table', [
+                'table' => $tableName,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'table' => $tableName,
+                'mongodb_collection' => $config['mongodb_collection'],
+                'mssql_table' => $config['mssql_table'],
+                'mongodb_count' => null,
+                'mssql_count' => null,
+                'difference' => null,
+                'is_complete' => false,
+                'status' => 'ERROR',
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    private function cachedAllResultsPath($startDateInput, $endDateInput)
+    {
+        $start = Carbon::parse($startDateInput)->format('Y-m-d');
+        $end = Carbon::parse($endDateInput)->format('Y-m-d');
+
+        return 'validation_results/' . $start . '_' . $end . '.json';
+    }
+
+    private function loadCachedAllResults($startDateInput, $endDateInput)
+    {
+        $path = $this->cachedAllResultsPath($startDateInput, $endDateInput);
+        if (!Storage::disk('local')->exists($path)) {
+            return null;
+        }
+
+        $raw = Storage::disk('local')->get($path);
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    private function saveCachedAllResults($startDateInput, $endDateInput, array $payload)
+    {
+        $path = $this->cachedAllResultsPath($startDateInput, $endDateInput);
+        Storage::disk('local')->put($path, json_encode($payload));
     }
 
     public function getValidationHistory()

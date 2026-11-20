@@ -36,6 +36,9 @@ Route::prefix('migration-validation')->group(function () {
     // Other routes
     Route::get('/tables', [MigrationValidationController::class, 'getAvailableTables']);
     Route::get('/history', [MigrationValidationController::class, 'getValidationHistory']);
+    Route::get('/results', [MigrationValidationController::class, 'getCachedAllResults']);
+    Route::post('/results', [MigrationValidationController::class, 'saveCachedAllResultsRequest']);
+    Route::post('/validate/table/counts', [MigrationValidationController::class, 'validateTableCounts']);
     Route::post('/validate/all', [MigrationValidationController::class, 'validateAllTables']);
     Route::post('/create-index', [MigrationValidationController::class, 'createIndex']);
     Route::get('/debug', [MigrationValidationController::class, 'debugDateRange']);

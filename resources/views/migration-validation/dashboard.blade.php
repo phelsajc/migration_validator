@@ -118,8 +118,11 @@
                                     <button type="button" class="btn btn-primary" onclick="validateSelectedTable()" id="validateBtn" disabled>
                                         <i class="fas fa-search"></i> Validate
                                     </button>
-                                    <button type="button" class="btn btn-success" onclick="validateAllTables()" id="validateAllBtn">
+                                    <button type="button" class="btn btn-success" onclick="validateAllTables(true)" id="validateAllBtn">
                                         <i class="fas fa-check-double"></i> Validate All
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="validateAllTables(true)" id="refreshCountsBtn" title="Re-run live counts and update cache">
+                                        <i class="fas fa-sync-alt"></i> Refresh counts
                                     </button>
                                 </div>
                             </div>
@@ -152,8 +155,8 @@
                         <div id="validationResults">
                             <div class="text-center text-muted">
                                 <i class="fas fa-info-circle fa-2x mb-3"></i>
-                                <p>Loading previous-day count check for all tables automatically…</p>
-                                <p><small>Dates are UTC calendar days. You can still pick a range and use Validate or Validate All.</small></p>
+                                <p>Loading previous-day results…</p>
+                                <p><small>Uses cached counts when available (instant). Otherwise runs a live count check table by table.</small></p>
                             </div>
                         </div>
                     </div>
@@ -310,10 +313,75 @@
             validateSelectedTable();
         }
 
-        function validateAllTables() {
+        function setCountButtonsDisabled(disabled) {
+            const validateAllBtn = document.getElementById('validateAllBtn');
+            const refreshCountsBtn = document.getElementById('refreshCountsBtn');
+            if (validateAllBtn) {
+                validateAllBtn.disabled = disabled;
+            }
+            if (refreshCountsBtn) {
+                refreshCountsBtn.disabled = disabled;
+            }
+        }
+
+        function buildSummaryFromValidations(validations) {
+            let complete = 0;
+            let incomplete = 0;
+            let errors = 0;
+            validations.forEach(row => {
+                if (row.status === 'ERROR') {
+                    errors++;
+                } else if (row.is_complete) {
+                    complete++;
+                } else {
+                    incomplete++;
+                }
+            });
+            return {
+                total_tables: validations.length,
+                complete_tables: complete,
+                incomplete_tables: incomplete,
+                error_tables: errors,
+            };
+        }
+
+        function loadCachedOrLiveResults() {
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
-            const validateAllBtn = document.getElementById('validateAllBtn');
+            if (!startDate || !endDate) {
+                return;
+            }
+
+            showLoading();
+            const resultsDiv = document.getElementById('validationResults');
+            resultsDiv.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                    <p>Checking for cached previous-day results…</p>
+                </div>
+            `;
+
+            const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+            fetch('/api/migration-validation/results?' + params.toString())
+                .then(response => response.json().then(data => ({ ok: response.ok, data })))
+                .then(({ ok, data }) => {
+                    hideLoading();
+                    if (ok && data.success && data.data && data.data.validations) {
+                        displayValidationResults({ success: true, data: data.data, cached: true });
+                        return;
+                    }
+                    validateAllTables(false);
+                })
+                .catch(error => {
+                    console.error('Cache lookup failed:', error);
+                    hideLoading();
+                    validateAllTables(false);
+                });
+        }
+
+        async function validateAllTables(forceLive) {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
             const resultsDiv = document.getElementById('validationResults');
 
             if (!startDate || !endDate) {
@@ -322,41 +390,109 @@
             }
 
             showLoading();
-            if (validateAllBtn) {
-                validateAllBtn.disabled = true;
-            }
-            resultsDiv.innerHTML = `
-                <div class="text-center text-muted">
-                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
-                    <p>Counting MongoDB and MSSQL for every table.</p>
-                    <p><small>This is the count-only check. It can take a few minutes. Record matching stays on the single-table Validate button.</small></p>
-                </div>
-            `;
+            setCountButtonsDisabled(true);
 
-            fetch('/api/migration-validation/validate/all', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    start_date: startDate,
-                    end_date: endDate
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
+            let tables = [];
+            try {
+                const tablesResponse = await fetch('/api/migration-validation/tables');
+                const tablesData = await tablesResponse.json();
+                tables = (tablesData.data && tablesData.data.tables) ? tablesData.data.tables : [];
+            } catch (error) {
                 hideLoading();
-                if (validateAllBtn) {
-                    validateAllBtn.disabled = false;
-                }
-                displayValidationResults(data);
-            })
-            .catch(error => {
+                setCountButtonsDisabled(false);
+                displayError('Failed to load tables: ' + error.message);
+                return;
+            }
+
+            if (!tables.length) {
                 hideLoading();
-                if (validateAllBtn) {
-                    validateAllBtn.disabled = false;
+                setCountButtonsDisabled(false);
+                displayError('No configured tables found.');
+                return;
+            }
+
+            const validations = tables.map(table => ({
+                table: table.name,
+                mongodb_collection: table.mongodb_collection,
+                mssql_table: table.mssql_table,
+                mongodb_count: null,
+                mssql_count: null,
+                difference: null,
+                is_complete: false,
+                status: 'PENDING',
+                error: null,
+            }));
+
+            const livePayload = {
+                validations,
+                summary: buildSummaryFromValidations(validations),
+                start_date: startDate,
+                end_date: endDate,
+                validated_at: new Date().toISOString(),
+            };
+            displayValidationResults({ success: true, data: livePayload, cached: false, inProgress: true });
+
+            for (let i = 0; i < tables.length; i++) {
+                const tableName = tables[i].name;
+                try {
+                    const response = await fetch('/api/migration-validation/validate/table/counts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            table: tableName,
+                            start_date: startDate,
+                            end_date: endDate,
+                        }),
+                    });
+                    const data = await response.json();
+                    if (data.success && data.data) {
+                        validations[i] = data.data;
+                    } else {
+                        validations[i] = {
+                            ...validations[i],
+                            status: 'ERROR',
+                            error: data.error || 'Count failed',
+                        };
+                    }
+                } catch (error) {
+                    validations[i] = {
+                        ...validations[i],
+                        status: 'ERROR',
+                        error: error.message || 'Count failed',
+                    };
                 }
-                console.error('Error:', error);
-                displayError('Validation failed: ' + error.message);
-            });
+
+                livePayload.validations = validations;
+                livePayload.summary = buildSummaryFromValidations(validations);
+                livePayload.validated_at = new Date().toISOString();
+                displayValidationResults({
+                    success: true,
+                    data: livePayload,
+                    cached: false,
+                    inProgress: i < tables.length - 1,
+                    progress: { done: i + 1, total: tables.length },
+                });
+            }
+
+            try {
+                await fetch('/api/migration-validation/results', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        start_date: startDate,
+                        end_date: endDate,
+                        validations,
+                        summary: livePayload.summary,
+                        validated_at: livePayload.validated_at,
+                    }),
+                });
+            } catch (error) {
+                console.error('Failed to save cached results:', error);
+            }
+
+            hideLoading();
+            setCountButtonsDisabled(false);
+            displayValidationResults({ success: true, data: livePayload, cached: false, inProgress: false });
         }
 
         function validateOneFromAll(tableName) {
@@ -563,8 +699,15 @@
             
             if (data && data.success && data.data && data.data.validations) {
                 const summary = data.data.summary || {};
+                const fromCache = !!data.cached;
+                const inProgress = !!data.inProgress;
+                const progress = data.progress || null;
                 const validations = [...data.data.validations].sort((a, b) => {
-                    const rank = (row) => row.status === 'ERROR' ? 0 : (row.is_complete ? 2 : 1);
+                    const rank = (row) => {
+                        if (row.status === 'PENDING') return 3;
+                        if (row.status === 'ERROR') return 0;
+                        return row.is_complete ? 2 : 1;
+                    };
                     const rankDiff = rank(a) - rank(b);
                     if (rankDiff !== 0) {
                         return rankDiff;
@@ -581,31 +724,40 @@
                     ? new Date(data.data.validated_at).toLocaleString()
                     : new Date().toLocaleString();
 
-                const incompleteTables = validations.filter(row => row.status !== 'ERROR' && !row.is_complete);
+                const incompleteTables = validations.filter(row => row.status === 'INCOMPLETE' || (row.status !== 'ERROR' && row.status !== 'PENDING' && !row.is_complete));
                 const errorTables = validations.filter(row => row.status === 'ERROR');
 
                 let incompleteCallout = '';
-                if (incompleteTables.length > 0 || errorTables.length > 0) {
-                    const mismatchItems = incompleteTables.map(row => {
-                        const gap = row.difference === null || row.difference === undefined
-                            ? '—'
-                            : formatSignedCount(row.difference);
-                        return `<span class="incomplete-callout-item"><strong>${escapeHtml(row.table || 'Unknown')}</strong> gap ${gap}</span>`;
-                    }).join('');
-                    const errorItems = errorTables.map(row =>
-                        `<span class="incomplete-callout-item"><strong>${escapeHtml(row.table || 'Unknown')}</strong> error</span>`
-                    ).join('');
+                if (!inProgress) {
+                    if (incompleteTables.length > 0 || errorTables.length > 0) {
+                        const mismatchItems = incompleteTables.map(row => {
+                            const gap = row.difference === null || row.difference === undefined
+                                ? '—'
+                                : formatSignedCount(row.difference);
+                            return `<span class="incomplete-callout-item"><strong>${escapeHtml(row.table || 'Unknown')}</strong> gap ${gap}</span>`;
+                        }).join('');
+                        const errorItems = errorTables.map(row =>
+                            `<span class="incomplete-callout-item"><strong>${escapeHtml(row.table || 'Unknown')}</strong> error</span>`
+                        ).join('');
 
+                        incompleteCallout = `
+                            <div class="alert alert-warning">
+                                <strong>Needs attention</strong>
+                                <div class="mt-2">${mismatchItems}${errorItems}</div>
+                            </div>
+                        `;
+                    } else {
+                        incompleteCallout = `
+                            <div class="alert alert-success">
+                                <strong>All tables match</strong> for ${escapeHtml(dayLabel)}. MongoDB and MSSQL counts are equal.
+                            </div>
+                        `;
+                    }
+                } else if (progress) {
                     incompleteCallout = `
-                        <div class="alert alert-warning">
-                            <strong>Needs attention</strong>
-                            <div class="mt-2">${mismatchItems}${errorItems}</div>
-                        </div>
-                    `;
-                } else {
-                    incompleteCallout = `
-                        <div class="alert alert-success">
-                            <strong>All tables match</strong> for ${escapeHtml(dayLabel)}. MongoDB and MSSQL counts are equal.
+                        <div class="alert alert-info">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            Counting tables… ${progress.done} / ${progress.total}
                         </div>
                     `;
                 }
@@ -618,26 +770,42 @@
                     const difference = result.difference;
                     const isComplete = result.is_complete || false;
                     const status = result.status || 'UNKNOWN';
-                    const badgeClass = status === 'ERROR' ? 'bg-secondary' : (isComplete ? 'bg-success' : 'bg-danger');
+                    let badgeClass = 'bg-danger';
+                    if (status === 'ERROR') {
+                        badgeClass = 'bg-secondary';
+                    } else if (status === 'PENDING') {
+                        badgeClass = 'bg-warning text-dark';
+                    } else if (isComplete) {
+                        badgeClass = 'bg-success';
+                    }
                     const countText = (value) => value === null || value === undefined ? '—' : Number(value).toLocaleString();
                     const gapText = difference === null || difference === undefined ? '—' : formatSignedCount(difference);
+                    const gapClass = difference === 0 ? 'status-complete' : (difference === null || difference === undefined ? '' : 'status-incomplete');
+
+                    let actionCell = '';
+                    if (status === 'PENDING') {
+                        actionCell = '<small class="text-muted">Waiting…</small>';
+                    } else if (status === 'ERROR') {
+                        actionCell = `<small class="text-danger">${escapeHtml(result.error || 'Count failed')}</small>`;
+                    } else {
+                        actionCell = `<button class="btn btn-outline-primary btn-sm" onclick="validateOneFromAll('${escapeHtml(table)}')">Record check</button>`;
+                    }
 
                     rows += `
                         <tr>
                             <td>${escapeHtml(table)}</td>
                             <td class="text-end">${countText(mongodbCount)}</td>
                             <td class="text-end">${countText(mssqlCount)}</td>
-                            <td class="text-end ${difference === 0 ? 'status-complete' : 'status-incomplete'}">${gapText}</td>
+                            <td class="text-end ${gapClass}">${gapText}</td>
                             <td><span class="badge ${badgeClass}">${escapeHtml(status)}</span></td>
-                            <td>
-                                ${status === 'ERROR'
-                                    ? `<small class="text-danger">${escapeHtml(result.error || 'Count failed')}</small>`
-                                    : `<button class="btn btn-outline-primary btn-sm" onclick="validateOneFromAll('${escapeHtml(table)}')">Record check</button>`
-                                }
-                            </td>
+                            <td>${actionCell}</td>
                         </tr>
                     `;
                 });
+
+                const sourceBadge = fromCache
+                    ? '<span class="badge bg-info ms-2">Cached</span>'
+                    : (inProgress ? '<span class="badge bg-warning text-dark ms-2">Live…</span>' : '<span class="badge bg-success ms-2">Live</span>');
 
                 resultsDiv.innerHTML = `
                     <div class="alert alert-primary mb-3">
@@ -645,8 +813,12 @@
                             <div>
                                 <strong>Previous day:</strong> ${escapeHtml(dayLabel)}
                                 <span class="text-muted ms-2">(UTC calendar day)</span>
+                                ${sourceBadge}
                             </div>
-                            <div><small class="text-muted">Validated at ${escapeHtml(validatedAt)}</small></div>
+                            <div class="d-flex align-items-center gap-2">
+                                <small class="text-muted">Validated at ${escapeHtml(validatedAt)}</small>
+                                ${!inProgress ? `<button type="button" class="btn btn-sm btn-outline-primary" onclick="validateAllTables(true)"><i class="fas fa-sync-alt"></i> Refresh counts</button>` : ''}
+                            </div>
                         </div>
                     </div>
                     <div class="mb-3">
@@ -656,7 +828,7 @@
                         <span class="summary-chip summary-chip-total">${totalCount.toLocaleString()} total</span>
                     </div>
                     ${incompleteCallout}
-                    <p class="text-muted small mb-2">Complete means MongoDB count equals MSSQL count. Use Record check for identifier match details.</p>
+                    <p class="text-muted small mb-2">Complete means MongoDB count equals MSSQL count. Use Record check for identifier match details.${fromCache ? ' Cached snapshot — use Refresh counts for a live re-run.' : ''}</p>
                     <div class="table-responsive">
                         <table class="table table-striped table-hover table-sm">
                             <thead class="table-dark">
@@ -910,8 +1082,8 @@
             // Load available tables
             loadAvailableTables();
 
-            // Auto-run previous-day all-tables count check on login/dashboard load
-            validateAllTables();
+            // Prefer cached previous-day counts on login; fall back to live progressive counts
+            loadCachedOrLiveResults();
         });
     </script>
 </body>
