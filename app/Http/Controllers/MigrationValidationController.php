@@ -25,7 +25,7 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex',
         ],
-        'patients_v2' => [
+        /* 'patients_v2' => [
             'mongodb_collection' => 'patients',
             'mssql_table' => 'patients_v2',
             'date_field_mongo' => 'createdat',
@@ -33,7 +33,7 @@ class MigrationValidationController extends Controller
             'identifier_field' => 'patient_id',
             'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex',
-        ],
+        ], */
         #2
         'careproviders' => [
             'mongodb_collection' => 'users',

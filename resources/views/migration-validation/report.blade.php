@@ -26,9 +26,17 @@
                 <h1 class="mb-0">
                     <i class="fas fa-file-alt"></i> Migration Report
                 </h1>
-                <a href="{{ route('migration-validation.dashboard') }}" class="btn btn-outline-primary">
-                    <i class="fas fa-arrow-left"></i> Back to Dashboard
-                </a>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="{{ route('migration-validation.dashboard') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                    <form action="{{ route('logout') }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-secondary">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </button>
+                    </form>
+                </div>
             </div>
         </div>
 

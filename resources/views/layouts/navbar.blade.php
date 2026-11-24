@@ -11,9 +11,12 @@
     </ul>
     <ul class="navbar-nav ml-auto">
         <li class="nav-item">
-            <a href="{{ route('logout') }}" class="nav-link">
-                Logout
-            </a>
+            <form action="{{ route('logout') }}" method="POST" class="d-inline">
+                @csrf
+                <button type="submit" class="btn btn-link nav-link">
+                    Logout
+                </button>
+            </form>
         </li>
     </ul>
 </nav>
