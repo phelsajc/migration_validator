@@ -21,8 +21,8 @@ class MigrationValidationController extends Controller
             'mssql_table' => 'patients',
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
-            'identifier_field' => 'mrn',
-            'mongodb_identifier_field' => 'mrn',
+            'identifier_field' => 'patient_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex',
         ],
         'patients_v2' => [
@@ -30,8 +30,8 @@ class MigrationValidationController extends Controller
             'mssql_table' => 'patients_v2',
             'date_field_mongo' => 'createdat',
             'date_field_mssql' => 'createddate',
-            'identifier_field' => 'mrn',
-            'mongodb_identifier_field' => 'mrn',
+            'identifier_field' => 'patient_id',
+            'mongodb_identifier_field' => '_id',
             'pipeline_type' => 'complex',
         ],
         #2
