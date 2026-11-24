@@ -25,6 +25,15 @@ class MigrationValidationController extends Controller
             'mongodb_identifier_field' => 'mrn',
             'pipeline_type' => 'complex',
         ],
+        'patients_v2' => [
+            'mongodb_collection' => 'patients',
+            'mssql_table' => 'patients_v2',
+            'date_field_mongo' => 'createdat',
+            'date_field_mssql' => 'createddate',
+            'identifier_field' => 'mrn',
+            'mongodb_identifier_field' => 'mrn',
+            'pipeline_type' => 'complex',
+        ],
         #2
         'careproviders' => [
             'mongodb_collection' => 'users',
